@@ -1,0 +1,144 @@
+require('dotenv').config();
+const path = require('path');
+const fs = require('fs');
+const express = require('express');
+const imapClient = require('./lib/imapClient');
+const db = require('./lib/db');
+
+const LOG_FILE = path.join(__dirname, 'sync.log');
+
+function log(msg) {
+  const ts = new Date().toISOString();
+  const line = `[${ts}] ${msg}\n`;
+  fs.appendFileSync(LOG_FILE, line);
+  console.log(line.trim());
+}
+
+// Capture all console.log/warn to file
+const originalLog = console.log;
+const originalWarn = console.warn;
+
+console.log = function(...args) {
+  const msg = args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ');
+  fs.appendFileSync(LOG_FILE, msg + '\n');
+  originalLog.apply(console, args);
+};
+
+console.warn = function(...args) {
+  const msg = args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ');
+  fs.appendFileSync(LOG_FILE, msg + '\n');
+  originalWarn.apply(console, args);
+};
+
+const app = express();
+const PORT = Number(process.env.PORT) || 8420;
+
+app.use(express.static(__dirname));
+
+app.get('/api/documents', (req, res) => {
+  res.json(imapClient.getDocuments());
+});
+
+app.get('/api/documents/:id/download', async (req, res) => {
+  try {
+    const file = await imapClient.downloadAttachment(req.params.id);
+    if (!file) return res.status(404).json({ error: 'not found' });
+    res.setHeader('Content-Type', file.contentType);
+    res.setHeader('Content-Disposition', `attachment; filename="${file.filename.replace(/"/g, '')}"`);
+    res.send(file.buffer);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/documents/zip', async (req, res) => {
+  const ids = (req.query.ids || '').split(',').filter(Boolean);
+  if (!ids.length) return res.status(400).json({ error: 'no ids' });
+  res.setHeader('Content-Type', 'application/zip');
+  res.setHeader('Content-Disposition', 'attachment; filename="documents.zip"');
+  try {
+    await imapClient.downloadZipStream(ids, res);
+  } catch (err) {
+    if (!res.headersSent) res.status(500).json({ error: err.message });
+    else res.end();
+  }
+});
+
+app.get('/api/status', (req, res) => {
+  res.json(imapClient.getStatus());
+});
+
+app.post('/api/sync', async (req, res) => {
+  log('Sync started');
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+
+  const sendEvent = (data) => {
+    const event = typeof data === 'object' && !data.type ? { type: 'progress', ...data } : data;
+    res.write(`data: ${JSON.stringify(event)}\n\n`);
+  };
+
+  try {
+    const status = await imapClient.scan(sendEvent);
+    log(`Sync complete: ${status.messageCount} documents, error: ${status.error || 'none'}`);
+    sendEvent({ type: 'complete', status });
+    res.end();
+  } catch (err) {
+    log(`Sync error: ${err.message}`);
+    sendEvent({ type: 'error', error: err.message });
+    res.end();
+  }
+});
+
+app.get('/api/documents/:id/preview', async (req, res) => {
+  try {
+    console.log(`[preview] Fetching ${req.params.id}`);
+    const file = await imapClient.downloadAttachment(req.params.id);
+    if (!file) {
+      console.log(`[preview] File not found: ${req.params.id}`);
+      return res.status(404).json({ error: 'not found' });
+    }
+
+    const contentType = file.contentType.toLowerCase();
+    if (!contentType.includes('pdf') && !contentType.includes('image/jpeg') && !contentType.includes('image/jpg')) {
+      console.log(`[preview] Unsupported type: ${contentType}`);
+      return res.json({ error: 'preview not available', contentType: file.contentType });
+    }
+
+    console.log(`[preview] Serving ${file.filename} (${file.buffer.length} bytes)`);
+    res.setHeader('Content-Type', file.contentType);
+    res.setHeader('X-Filename', file.filename);
+    res.send(file.buffer);
+  } catch (err) {
+    console.error(`[preview] Error: ${err.message}`);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/documents/:id/locked', async (req, res) => {
+  try {
+    const file = await imapClient.downloadAttachment(req.params.id);
+    if (!file) return res.status(404).json({ error: 'not found' });
+
+    const contentType = file.contentType.toLowerCase();
+    if (!contentType.includes('pdf')) {
+      return res.json({ locked: false });
+    }
+
+    // Check if PDF is encrypted by looking for Encrypt dict
+    const bufStr = file.buffer.toString('binary');
+    const isLocked = /\/Encrypt\s+\d+\s+\d+\s+R/.test(bufStr);
+    res.json({ locked: isLocked, filename: file.filename });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.listen(PORT, () => {
+  log(`Docket server listening on port ${PORT}`);
+  db.init();
+  log('Database initialized');
+  imapClient.rebuildAttachmentIndex();
+});
