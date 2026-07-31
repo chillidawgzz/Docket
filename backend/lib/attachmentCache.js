@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const CACHE_DIR = path.join(__dirname, '..', 'data', 'attachments');
+const CACHE_DIR = path.join(__dirname, '..', '..', 'data', 'attachments');
 
 function ensureDir() {
   fs.mkdirSync(CACHE_DIR, { recursive: true });

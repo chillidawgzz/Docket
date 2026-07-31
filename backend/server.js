@@ -1,4 +1,4 @@
-require('dotenv').config();
+require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
 const path = require('path');
 const fs = require('fs');
 const express = require('express');
@@ -7,8 +7,9 @@ const db = require('./lib/db');
 const { resolveContentType, isPreviewable } = require('./lib/previewTypes');
 const attachmentCache = require('./lib/attachmentCache');
 
-const LOG_FILE = path.join(__dirname, 'sync.log');
-const FRONTEND_DIST = path.join(__dirname, 'packages', 'frontend', 'dist');
+const ROOT = path.join(__dirname, '..');
+const LOG_FILE = path.join(ROOT, 'sync.log');
+const FRONTEND_DIST = path.join(ROOT, 'packages', 'frontend', 'dist');
 
 function log(msg) {
   const ts = new Date().toISOString();

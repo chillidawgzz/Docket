@@ -5,7 +5,7 @@
 > **Copyright © 2026 chillidawgzz — All Rights Reserved.**  
 > Source may be viewed. Copying, modifying, or redistributing requires permission. See [`LICENSE`](LICENSE).
 
-This repository includes the **full stack**: Express/IMAP/SQLite **backend** (`server.js`, `lib/`) and the React **frontend** (`packages/frontend`).
+This repository includes the **full stack**: Express/IMAP/SQLite **backend** (`backend/`) and the React **frontend** (`packages/frontend`).
 
 Traditional email clients are **messaging-first**. Threads, unread counts, reply-all, and the inbox timeline are the product. Attachments are a secondary detail — something you open from inside a message, if you remember which message held the invoice, the lease, or the tax form.
 
@@ -21,8 +21,9 @@ If your real question is *“Where is that file someone emailed me?”* instead 
 
 | Path | What it is |
 | --- | --- |
-| [`server.js`](server.js) | Express HTTP API, sync SSE, static UI hosting |
-| [`lib/`](lib/) | Backend: IMAP client, SQLite DB, attachment cache, preview types |
+| [`backend/`](backend/) | Express HTTP API, IMAP sync, SQLite, attachment cache |
+| [`backend/server.js`](backend/server.js) | API entrypoint |
+| [`backend/lib/`](backend/lib/) | IMAP client, DB, preview types, disk cache |
 | [`packages/frontend/`](packages/frontend/) | React + TypeScript SPA (Vite) |
 | [`LICENSE`](LICENSE) | Proprietary copyright — view only, not free to copy |
 | [`.env.example`](.env.example) | Required Gmail/IMAP config template (no secrets) |
@@ -73,7 +74,7 @@ Read-only by design: Docket does not send mail or mutate your Gmail mailbox.
 ```
 Gmail (IMAP) ──scan──► SQLite (documents, tags, attachment refs)
                          │
-                         ├── API (Express)
+                         ├── backend/ (Express API)
                          │     GET  /api/documents
                          │     GET  /api/tags
                          │     PATCH /api/documents/:id   (tags, download filename)
@@ -81,7 +82,7 @@ Gmail (IMAP) ──scan──► SQLite (documents, tags, attachment refs)
                          │     GET  /api/documents/:id/download
                          │     POST /api/sync  (SSE progress)
                          │
-                         └── React SPA (packages/frontend)
+                         └── packages/frontend (React SPA)
                                table · filters · preview · viewer
 
 Attachment bytes: IMAP on first request → data/attachments/ cache → later hits are local
@@ -89,10 +90,10 @@ Attachment bytes: IMAP on first request → data/attachments/ cache → later hi
 
 | Layer | Role |
 | --- | --- |
-| `server.js` | HTTP API + static UI |
-| `lib/imapClient.js` | IMAP scan / download |
-| `lib/db.js` | SQLite schema and queries |
-| `lib/attachmentCache.js` | On-disk attachment cache |
+| `backend/server.js` | HTTP API + static UI |
+| `backend/lib/imapClient.js` | IMAP scan / download |
+| `backend/lib/db.js` | SQLite schema and queries |
+| `backend/lib/attachmentCache.js` | On-disk attachment cache |
 | `packages/frontend` | Vite + React + TypeScript UI |
 
 ---
