@@ -4,5 +4,6 @@ dist/
 data.db
 data.db-shm
 data.db-wal
+data/attachments/
 sync.log
 proxmox-jobs.sqlite3

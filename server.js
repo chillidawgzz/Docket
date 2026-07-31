@@ -5,6 +5,7 @@ const express = require('express');
 const imapClient = require('./lib/imapClient');
 const db = require('./lib/db');
 const { resolveContentType, isPreviewable } = require('./lib/previewTypes');
+const attachmentCache = require('./lib/attachmentCache');
 
 const LOG_FILE = path.join(__dirname, 'sync.log');
 const FRONTEND_DIST = path.join(__dirname, 'packages', 'frontend', 'dist');
@@ -80,7 +81,14 @@ app.get('/api/documents/:id/download', async (req, res) => {
   try {
     const file = await imapClient.downloadAttachment(req.params.id);
     if (!file) return res.status(404).json({ error: 'not found' });
+    const size = file.size || file.buffer.length;
+    const etag = attachmentCache.etagFor(req.params.id, size, file.mtimeMs);
+    if (req.headers['if-none-match'] === etag) {
+      return res.status(304).end();
+    }
     res.setHeader('Content-Type', file.contentType);
+    res.setHeader('Cache-Control', 'private, max-age=86400');
+    res.setHeader('ETag', etag);
     res.setHeader('Content-Disposition', `attachment; filename="${file.filename.replace(/"/g, '')}"`);
     res.send(file.buffer);
   } catch (err) {
@@ -149,10 +157,20 @@ app.get('/api/documents/:id/preview', async (req, res) => {
 
     const previewName = file.sourceFilename || file.filename;
     const contentType = resolveContentType(previewName, file.contentType);
-    console.log(`[preview] Serving ${previewName} as ${contentType} (${file.buffer.length} bytes)`);
+    const size = file.size || file.buffer.length;
+    const etag = attachmentCache.etagFor(req.params.id, size, file.mtimeMs);
+    if (req.headers['if-none-match'] === etag) {
+      return res.status(304).end();
+    }
+
+    console.log(
+      `[preview] Serving ${previewName} as ${contentType} (${size} bytes)` +
+        (file.fromCache ? ' [cache]' : ' [imap]'),
+    );
     res.setHeader('Content-Type', contentType);
     res.setHeader('X-Filename', encodeURIComponent(previewName));
-    res.setHeader('Cache-Control', 'private, max-age=300');
+    res.setHeader('Cache-Control', 'private, max-age=86400');
+    res.setHeader('ETag', etag);
     res.setHeader('Content-Disposition', `inline; filename="${previewName.replace(/"/g, '')}"`);
     res.send(file.buffer);
   } catch (err) {
