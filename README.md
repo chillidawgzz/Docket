@@ -2,10 +2,10 @@
 
 **An attachment-first Gmail client for people who live in their files, not their inbox.**
 
+**MVP** — self-hosted attachment-first Gmail archive with a real **backend** (`backend/`) and **UI** (`packages/frontend`). Shipping enough to prove the paradigm: find and work with documents from email without living in an inbox.
+
 > **Copyright © 2026 chillidawgzz — All Rights Reserved.**  
 > Source may be viewed. Copying, modifying, or redistributing requires permission. See [`LICENSE`](LICENSE).
-
-This repository includes the **full stack**: Express/IMAP/SQLite **backend** (`backend/`) and the React **frontend** (`packages/frontend`).
 
 Traditional email clients are **messaging-first**. Threads, unread counts, reply-all, and the inbox timeline are the product. Attachments are a secondary detail — something you open from inside a message, if you remember which message held the invoice, the lease, or the tax form.
 
@@ -17,7 +17,31 @@ If your real question is *“Where is that file someone emailed me?”* instead 
 
 ---
 
-## Repository layout
+## What’s in the MVP
+
+- **IMAP → SQLite** — incremental sync indexes attachments into a local archive (`backend/`)
+- **Document table** — filename, download-as name, sender, tags, date, size; sortable / resizable
+- **Tags** — shared list, typeahead, create-as-you-type, Any (OR) / All (AND) filter
+- **Editable download names** — rename what you download without changing the original attachment
+- **Preview** — metadata + stored email body; open the file in an attachment viewer
+- **Attachment previews** — PDF, images, text, Office (docx/xlsx), ICS, EML, audio/video where the browser allows
+- **Disk cache** — first preview hits IMAP; repeats serve from `data/attachments/`
+- **Bulk zip download** + LAN bind (`0.0.0.0:8420`)
+
+Express API lives under [`backend/`](backend/) (documents, tags, patch, preview, download, sync SSE). UI is [`packages/frontend/`](packages/frontend/).
+
+---
+
+## Not in the MVP
+
+- Compose / send / reply (read-only on purpose)
+- Replacing Gmail for day-to-day conversation
+- Cloud SaaS hosting — you run it yourself
+- Open-source reuse rights — proprietary; view only (see [`LICENSE`](LICENSE))
+
+---
+
+## MVP codebase layout
 
 | Path | What it is |
 | --- | --- |
@@ -49,23 +73,7 @@ Most “document” problems in email are not communication problems. They are *
 
 Docket treats Gmail as a **read-only document feed** over IMAP, indexes attachments into a local SQLite archive, and gives you a table + preview UI that assumes the file is the thing you care about.
 
-That is the requirement it satisfies: **attachment-first email, without abandoning the mail that delivered the file.**
-
----
-
-## What you get
-
-- **Document table** — filename, download-as name, sender, tags, date, size; sortable / resizable columns  
-- **Tags** — shared tag list, typeahead, create-as-you-type, Any (OR) / All (AND) filtering  
-- **Editable download names** — rename what leaves the archive without renaming the original attachment  
-- **Side preview** — metadata + full stored email body under it; open the attachment in a viewer  
-- **Attachment previews** — PDF, images, text, Office (docx/xlsx), ICS, EML, audio/video where the browser allows  
-- **On-demand disk cache** — first preview hits IMAP; repeats serve from local cache (much faster)  
-- **Bulk download** — zip selected documents  
-- **Incremental sync** — SQLite persistence; sync button with live progress (no full re-pull every load)  
-- **LAN-friendly** — server binds `0.0.0.0` (default port `8420`)
-
-Read-only by design: Docket does not send mail or mutate your Gmail mailbox.
+That is the requirement this MVP satisfies: **attachment-first email, without abandoning the mail that delivered the file.**
 
 ---
 
@@ -141,15 +149,6 @@ See [`.env.example`](.env.example). Critical variables:
 | `PORT` | HTTP port (default `8420`) |
 
 **Never commit `.env`.** Credentials stay local.
-
----
-
-## What Docket is not
-
-- Not a replacement for Gmail for day-to-day conversation  
-- Not a full mail client (no compose / send / reply)  
-- Not a cloud SaaS — you run it yourself  
-- Not open source for reuse — see license below  
 
 ---
 
