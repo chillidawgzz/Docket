@@ -1,7 +1,9 @@
+import { useCallback, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { Document } from '../api/types'
 import { CATEGORIES } from '../lib/categories'
 import { formatShortDate, formatSize, monthKey, monthLabel } from '../lib/format'
+import { sortDocs, type SortDir, type SortKey } from '../lib/sort'
 
 function FileIcon() {
   return (
@@ -20,6 +22,32 @@ function FileIcon() {
       />
     </svg>
   )
+}
+
+type ColKey = 'name' | 'sender' | 'category' | 'date' | 'size'
+
+const COL_TO_SORT: Record<ColKey, SortKey> = {
+  name: 'filename',
+  sender: 'sender',
+  category: 'category',
+  date: 'date',
+  size: 'size',
+}
+
+const DEFAULT_WIDTHS: Record<ColKey, number> = {
+  name: 280,
+  sender: 150,
+  category: 120,
+  date: 96,
+  size: 76,
+}
+
+const MIN_WIDTHS: Record<ColKey, number> = {
+  name: 120,
+  sender: 80,
+  category: 80,
+  date: 64,
+  size: 56,
 }
 
 interface DocumentTableProps {
@@ -47,22 +75,81 @@ export function DocumentTable({
   onRetry,
   children,
 }: DocumentTableProps) {
-  const allChecked =
-    list.length > 0 && list.every((d) => checked.has(d.id))
+  const [sortKey, setSortKey] = useState<SortKey>('date')
+  const [sortDir, setSortDir] = useState<SortDir>('desc')
+  const [widths, setWidths] = useState(DEFAULT_WIDTHS)
+  const dragRef = useRef<{
+    col: ColKey
+    startX: number
+    startW: number
+  } | null>(null)
 
+  const sorted = useMemo(
+    () => sortDocs(list, sortKey, sortDir),
+    [list, sortKey, sortDir],
+  )
+
+  const allChecked =
+    sorted.length > 0 && sorted.every((d) => checked.has(d.id))
+
+  const toggleSort = useCallback((col: ColKey) => {
+    const key = COL_TO_SORT[col]
+    setSortKey((prev) => {
+      if (prev === key) {
+        setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
+        return prev
+      }
+      // Date defaults to newest-first; others to ascending
+      setSortDir(key === 'date' ? 'desc' : 'asc')
+      return key
+    })
+  }, [])
+
+  const onResizeStart = useCallback((col: ColKey, clientX: number) => {
+    dragRef.current = { col, startX: clientX, startW: widths[col] }
+
+    const onMove = (ev: MouseEvent) => {
+      const drag = dragRef.current
+      if (!drag) return
+      const delta = ev.clientX - drag.startX
+      const next = Math.max(MIN_WIDTHS[drag.col], drag.startW + delta)
+      setWidths((w) => ({ ...w, [drag.col]: next }))
+    }
+    const onUp = () => {
+      dragRef.current = null
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+      document.body.classList.remove('col-resizing')
+    }
+    document.body.classList.add('col-resizing')
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+  }, [widths])
+
+  const gridStyle = {
+    ['--col-name' as string]: `${widths.name}px`,
+    ['--col-sender' as string]: `${widths.sender}px`,
+    ['--col-category' as string]: `${widths.category}px`,
+    ['--col-date' as string]: `${widths.date}px`,
+    ['--col-size' as string]: `${widths.size}px`,
+  }
+
+  const groupByMonth = sortKey === 'date'
   let currentMonth: string | null = null
   const rows: ReactNode[] = []
 
   if (!loading && !error) {
-    for (const d of list) {
-      const mk = monthKey(d.date)
-      if (mk !== currentMonth) {
-        currentMonth = mk
-        rows.push(
-          <div className="month-header" key={'m-' + mk}>
-            {monthLabel(d.date)}
-          </div>,
-        )
+    for (const d of sorted) {
+      if (groupByMonth) {
+        const mk = monthKey(d.date)
+        if (mk !== currentMonth) {
+          currentMonth = mk
+          rows.push(
+            <div className="month-header" key={'m-' + mk}>
+              {monthLabel(d.date)}
+            </div>,
+          )
+        }
       }
       const meta = CATEGORIES[d.category]
       const isChecked = checked.has(d.id)
@@ -122,8 +209,50 @@ export function DocumentTable({
     }
   }
 
+  const header = (
+    col: ColKey,
+    label: string,
+    alignRight?: boolean,
+  ) => {
+    const active = sortKey === COL_TO_SORT[col]
+    return (
+      <div
+        className={
+          'th-cell' +
+          (alignRight ? ' th-cell--right' : '') +
+          (active ? ' th-cell--active' : '')
+        }
+      >
+        <button
+          type="button"
+          className="th-sort"
+          onClick={() => toggleSort(col)}
+          aria-sort={
+            active ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'
+          }
+        >
+          <span>{label}</span>
+          <span className="th-indicator" aria-hidden="true">
+            {active ? (sortDir === 'asc' ? '▲' : '▼') : ''}
+          </span>
+        </button>
+        <span
+          className="col-resize"
+          onMouseDown={(e) => {
+            e.preventDefault()
+            e.stopPropagation()
+            onResizeStart(col, e.clientX)
+          }}
+          role="separator"
+          aria-orientation="vertical"
+          aria-label={`Resize ${label} column`}
+        />
+      </div>
+    )
+  }
+
   return (
-    <main className="table-pane">
+    <main className="table-pane" style={gridStyle}>
       <div className="table-toolbar">
         <div className="result-count">
           {loading ? (
@@ -132,11 +261,11 @@ export function DocumentTable({
             'error'
           ) : (
             <>
-              <b>{list.length}</b> document{list.length === 1 ? '' : 's'}
+              <b>{sorted.length}</b> document{sorted.length === 1 ? '' : 's'}
             </>
           )}
         </div>
-        {!loading && !error && list.length > 0 && (
+        {!loading && !error && sorted.length > 0 && (
           <button
             type="button"
             className="select-all-link"
@@ -144,18 +273,18 @@ export function DocumentTable({
           >
             {allChecked
               ? 'Deselect all'
-              : `Select all ${list.length} in view`}
+              : `Select all ${sorted.length} in view`}
           </button>
         )}
       </div>
       <div className="table-scroll">
         <div className="table-head-row" role="row">
           <div />
-          <div>Name</div>
-          <div>Sender</div>
-          <div>Category</div>
-          <div>Date</div>
-          <div style={{ textAlign: 'right' }}>Size</div>
+          {header('name', 'Name')}
+          {header('sender', 'Sender')}
+          {header('category', 'Category')}
+          {header('date', 'Date')}
+          {header('size', 'Size', true)}
         </div>
         <div>
           {loading && (
@@ -174,12 +303,12 @@ export function DocumentTable({
               </button>
             </div>
           )}
-          {!loading && !error && list.length === 0 && (
+          {!loading && !error && sorted.length === 0 && (
             <div className="empty-state">
               no documents match these filters
             </div>
           )}
-          {!loading && !error && list.length > 0 && rows}
+          {!loading && !error && sorted.length > 0 && rows}
         </div>
       </div>
       {children}

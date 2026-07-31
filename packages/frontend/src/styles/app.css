@@ -288,7 +288,13 @@
   .doc-table{width:100%;}
   .table-head-row, .doc-row{
     display:grid;
-    grid-template-columns:36px minmax(0,1fr) 150px 120px 96px 76px;
+    grid-template-columns:
+      36px
+      var(--col-name, minmax(0, 1fr))
+      var(--col-sender, 150px)
+      var(--col-category, 120px)
+      var(--col-date, 96px)
+      var(--col-size, 76px);
     align-items:center;
     gap:var(--space-3);
     padding:0 var(--space-5);
@@ -306,6 +312,65 @@
     letter-spacing:0.06em;
     color:var(--text-tertiary);
   }
+  .th-cell{
+    position:relative;
+    display:flex;
+    align-items:center;
+    min-width:0;
+    height:100%;
+  }
+  .th-cell--right .th-sort{justify-content:flex-end;}
+  .th-sort{
+    display:inline-flex;
+    align-items:center;
+    gap:4px;
+    max-width:100%;
+    padding:0;
+    border:none;
+    background:none;
+    color:inherit;
+    font:inherit;
+    text-transform:inherit;
+    letter-spacing:inherit;
+    cursor:pointer;
+    min-width:0;
+  }
+  .th-sort:hover{color:var(--text);}
+  .th-cell--active .th-sort{color:var(--accent);}
+  .th-indicator{
+    font-size:8px;
+    line-height:1;
+    color:var(--accent);
+    flex:none;
+  }
+  .col-resize{
+    position:absolute;
+    top:0;
+    right:-6px;
+    width:10px;
+    height:100%;
+    cursor:col-resize;
+    z-index:4;
+  }
+  .col-resize::after{
+    content:'';
+    position:absolute;
+    top:8px;
+    bottom:8px;
+    left:4px;
+    width:2px;
+    border-radius:1px;
+    background:transparent;
+  }
+  .col-resize:hover::after,
+  body.col-resizing .col-resize:hover::after{
+    background:var(--accent);
+  }
+  body.col-resizing{
+    cursor:col-resize !important;
+    user-select:none;
+  }
+  body.col-resizing *{cursor:col-resize !important;}
   .month-header{
     position:sticky;
     top:34px;
@@ -855,7 +920,12 @@
       border-left:none;
     }
     .body.preview-open .preview-panel{display:block;}
-    .table-head-row, .doc-row{grid-template-columns:32px minmax(0,1fr) 96px 60px;}
+    .table-head-row, .doc-row{
+      grid-template-columns:32px minmax(0,1fr) 96px 60px !important;
+    }
     .cell-sender, .cell-size{display:none;}
+    .th-cell:nth-child(3),
+    .th-cell:nth-child(6){display:none;}
+    .col-resize{display:none;}
     .search{max-width:none;}
   }
