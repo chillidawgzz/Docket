@@ -105,7 +105,7 @@ export default function App() {
             previewId={previewId}
             onToggleCheck={toggle}
             onRowActivate={onRowActivate}
-            onSelectAll={() => selectAll(list)}
+            onSelectAll={(rows) => selectAll(rows)}
             onRetry={() => void reload()}
           >
             <BulkBar docs={docs} checked={checked} onClear={clear} />

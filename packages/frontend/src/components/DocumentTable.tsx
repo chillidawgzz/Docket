@@ -1,5 +1,11 @@
-import { useCallback, useMemo, useRef, useState } from 'react'
-import type { ReactNode } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react'
 import type { Document } from '../api/types'
 import { CATEGORIES } from '../lib/categories'
 import { formatShortDate, formatSize, monthKey, monthLabel } from '../lib/format'
@@ -24,7 +30,26 @@ function FileIcon() {
   )
 }
 
+function GearIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M12 15.5a3.5 3.5 0 100-7 3.5 3.5 0 000 7z"
+        stroke="currentColor"
+        strokeWidth="1.7"
+      />
+      <path
+        d="M19.4 13.5v-3l1.8-1.4-1.5-2.6-2.2.5a6.8 6.8 0 00-1.5-.9L15.5 3h-3l-.5 2.1a6.8 6.8 0 00-1.5.9l-2.2-.5-1.5 2.6L8.6 10.5v3l-1.8 1.4 1.5 2.6 2.2-.5c.5.4 1 .7 1.5.9L12.5 21h3l.5-2.1c.5-.2 1-.5 1.5-.9l2.2.5 1.5-2.6-1.8-1.4z"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
 type ColKey = 'name' | 'sender' | 'category' | 'date' | 'size'
+type RowLimit = 10 | 50 | 100 | 200 | 'all'
 
 const COL_TO_SORT: Record<ColKey, SortKey> = {
   name: 'filename',
@@ -33,6 +58,17 @@ const COL_TO_SORT: Record<ColKey, SortKey> = {
   date: 'date',
   size: 'size',
 }
+
+const COL_LABELS: Record<ColKey, string> = {
+  name: 'Name',
+  sender: 'Sender',
+  category: 'Category',
+  date: 'Date',
+  size: 'Size',
+}
+
+const TOGGLEABLE_COLS: ColKey[] = ['sender', 'category', 'date', 'size']
+const ROW_LIMITS: RowLimit[] = [10, 50, 100, 200, 'all']
 
 const DEFAULT_WIDTHS: Record<ColKey, number> = {
   name: 280,
@@ -50,6 +86,42 @@ const MIN_WIDTHS: Record<ColKey, number> = {
   size: 56,
 }
 
+const DEFAULT_VISIBLE: Record<ColKey, boolean> = {
+  name: true,
+  sender: true,
+  category: true,
+  date: true,
+  size: true,
+}
+
+const SETTINGS_KEY = 'docket.tableSettings'
+
+type TableSettings = {
+  visible: Record<ColKey, boolean>
+  rowLimit: RowLimit
+}
+
+function loadSettings(): TableSettings {
+  try {
+    const raw = localStorage.getItem(SETTINGS_KEY)
+    if (!raw) return { visible: { ...DEFAULT_VISIBLE }, rowLimit: 'all' }
+    const parsed = JSON.parse(raw) as Partial<TableSettings>
+    return {
+      visible: { ...DEFAULT_VISIBLE, ...parsed.visible, name: true },
+      rowLimit:
+        parsed.rowLimit === 'all' ||
+        parsed.rowLimit === 10 ||
+        parsed.rowLimit === 50 ||
+        parsed.rowLimit === 100 ||
+        parsed.rowLimit === 200
+          ? parsed.rowLimit
+          : 'all',
+    }
+  } catch {
+    return { visible: { ...DEFAULT_VISIBLE }, rowLimit: 'all' }
+  }
+}
+
 interface DocumentTableProps {
   list: Document[]
   loading: boolean
@@ -58,7 +130,7 @@ interface DocumentTableProps {
   previewId: string | null
   onToggleCheck: (id: string) => void
   onRowActivate: (id: string) => void
-  onSelectAll: () => void
+  onSelectAll: (ids: Document[]) => void
   onRetry: () => void
   children?: ReactNode
 }
@@ -75,22 +147,89 @@ export function DocumentTable({
   onRetry,
   children,
 }: DocumentTableProps) {
+  const initial = useMemo(() => loadSettings(), [])
   const [sortKey, setSortKey] = useState<SortKey>('date')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
   const [widths, setWidths] = useState(DEFAULT_WIDTHS)
+  const [visible, setVisible] = useState(initial.visible)
+  const [rowLimit, setRowLimit] = useState<RowLimit>(initial.rowLimit)
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const settingsRef = useRef<HTMLDivElement>(null)
   const dragRef = useRef<{
     col: ColKey
     startX: number
     startW: number
   } | null>(null)
 
+  useEffect(() => {
+    localStorage.setItem(
+      SETTINGS_KEY,
+      JSON.stringify({ visible, rowLimit } satisfies TableSettings),
+    )
+  }, [visible, rowLimit])
+
+  useEffect(() => {
+    if (!settingsOpen) return
+    const onDown = (e: MouseEvent) => {
+      if (!settingsRef.current?.contains(e.target as Node)) {
+        setSettingsOpen(false)
+      }
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setSettingsOpen(false)
+    }
+    window.addEventListener('mousedown', onDown)
+    window.addEventListener('keydown', onKey)
+    return () => {
+      window.removeEventListener('mousedown', onDown)
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [settingsOpen])
+
   const sorted = useMemo(
     () => sortDocs(list, sortKey, sortDir),
     [list, sortKey, sortDir],
   )
 
+  const displayed = useMemo(() => {
+    if (rowLimit === 'all') return sorted
+    return sorted.slice(0, rowLimit)
+  }, [sorted, rowLimit])
+
   const allChecked =
-    sorted.length > 0 && sorted.every((d) => checked.has(d.id))
+    displayed.length > 0 && displayed.every((d) => checked.has(d.id))
+  const someChecked =
+    displayed.some((d) => checked.has(d.id)) && !allChecked
+  const selectAllRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (selectAllRef.current) {
+      selectAllRef.current.indeterminate = someChecked
+    }
+  }, [someChecked])
+
+  const [isMobile, setIsMobile] = useState(
+    () =>
+      typeof window !== 'undefined' &&
+      window.matchMedia('(max-width: 900px)').matches,
+  )
+
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 900px)')
+    const onChange = () => setIsMobile(mq.matches)
+    onChange()
+    mq.addEventListener('change', onChange)
+    return () => mq.removeEventListener('change', onChange)
+  }, [])
+
+  const effectiveVisible = useMemo(() => {
+    if (!isMobile) return visible
+    return { ...visible, sender: false, size: false }
+  }, [visible, isMobile])
+
+  const visibleCols = (Object.keys(COL_LABELS) as ColKey[]).filter(
+    (c) => effectiveVisible[c],
+  )
 
   const toggleSort = useCallback((col: ColKey) => {
     const key = COL_TO_SORT[col]
@@ -99,7 +238,6 @@ export function DocumentTable({
         setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
         return prev
       }
-      // Date defaults to newest-first; others to ascending
       setSortDir(key === 'date' ? 'desc' : 'asc')
       return key
     })
@@ -126,12 +264,15 @@ export function DocumentTable({
     window.addEventListener('mouseup', onUp)
   }, [widths])
 
+  const tableCols = [
+    '36px',
+    ...visibleCols.map((c) =>
+      c === 'name' ? `minmax(120px, ${widths.name}px)` : `${widths[c]}px`,
+    ),
+  ].join(' ')
+
   const gridStyle = {
-    ['--col-name' as string]: `${widths.name}px`,
-    ['--col-sender' as string]: `${widths.sender}px`,
-    ['--col-category' as string]: `${widths.category}px`,
-    ['--col-date' as string]: `${widths.date}px`,
-    ['--col-size' as string]: `${widths.size}px`,
+    ['--table-cols' as string]: tableCols,
   }
 
   const groupByMonth = sortKey === 'date'
@@ -139,7 +280,7 @@ export function DocumentTable({
   const rows: ReactNode[] = []
 
   if (!loading && !error) {
-    for (const d of sorted) {
+    for (const d of displayed) {
       if (groupByMonth) {
         const mk = monthKey(d.date)
         if (mk !== currentMonth) {
@@ -185,38 +326,54 @@ export function DocumentTable({
               onClick={(e) => e.stopPropagation()}
             />
           </div>
-          <div className="cell-name">
-            <span
-              className="file-icon"
+          {effectiveVisible.name && (
+            <div className="cell-name" data-col="name">
+              <span
+                className="file-icon"
+                style={{ ['--cat' as string]: meta.color }}
+              >
+                <FileIcon />
+              </span>
+              <span className="cell-filename">{d.filename}</span>
+            </div>
+          )}
+          {effectiveVisible.sender && (
+            <div className="cell-sender" data-col="sender">
+              {d.sender.name}
+            </div>
+          )}
+          {effectiveVisible.category && (
+            <div
+              className="cat-tag"
+              data-col="category"
               style={{ ['--cat' as string]: meta.color }}
             >
-              <FileIcon />
-            </span>
-            <span className="cell-filename">{d.filename}</span>
-          </div>
-          <div className="cell-sender">{d.sender.name}</div>
-          <div
-            className="cat-tag"
-            style={{ ['--cat' as string]: meta.color }}
-          >
-            <span className="facet-dot" />
-            {meta.label}
-          </div>
-          <div className="cell-date">{formatShortDate(d.date)}</div>
-          <div className="cell-size">{formatSize(d.size)}</div>
+              <span className="facet-dot" />
+              {meta.label}
+            </div>
+          )}
+          {effectiveVisible.date && (
+            <div className="cell-date" data-col="date">
+              {formatShortDate(d.date)}
+            </div>
+          )}
+          {effectiveVisible.size && (
+            <div className="cell-size" data-col="size">
+              {formatSize(d.size)}
+            </div>
+          )}
         </div>,
       )
     }
   }
 
-  const header = (
-    col: ColKey,
-    label: string,
-    alignRight?: boolean,
-  ) => {
+  const header = (col: ColKey, alignRight?: boolean) => {
+    if (!effectiveVisible[col]) return null
     const active = sortKey === COL_TO_SORT[col]
     return (
       <div
+        key={col}
+        data-col={col}
         className={
           'th-cell' +
           (alignRight ? ' th-cell--right' : '') +
@@ -231,7 +388,7 @@ export function DocumentTable({
             active ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'
           }
         >
-          <span>{label}</span>
+          <span>{COL_LABELS[col]}</span>
           <span className="th-indicator" aria-hidden="true">
             {active ? (sortDir === 'asc' ? '▲' : '▼') : ''}
           </span>
@@ -245,11 +402,17 @@ export function DocumentTable({
           }}
           role="separator"
           aria-orientation="vertical"
-          aria-label={`Resize ${label} column`}
+          aria-label={`Resize ${COL_LABELS[col]} column`}
         />
       </div>
     )
   }
+
+  const showingLimited =
+    !loading &&
+    !error &&
+    rowLimit !== 'all' &&
+    sorted.length > displayed.length
 
   return (
     <main className="table-pane" style={gridStyle}>
@@ -259,32 +422,108 @@ export function DocumentTable({
             'loading…'
           ) : error ? (
             'error'
+          ) : showingLimited ? (
+            <>
+              showing <b>{displayed.length}</b> of <b>{sorted.length}</b>
+            </>
           ) : (
             <>
               <b>{sorted.length}</b> document{sorted.length === 1 ? '' : 's'}
             </>
           )}
         </div>
-        {!loading && !error && sorted.length > 0 && (
-          <button
-            type="button"
-            className="select-all-link"
-            onClick={onSelectAll}
-          >
-            {allChecked
-              ? 'Deselect all'
-              : `Select all ${sorted.length} in view`}
-          </button>
-        )}
+        <div className="table-toolbar-right">
+          {!loading && !error && displayed.length > 0 && (
+            <button
+              type="button"
+              className="select-all-link"
+              onClick={() => onSelectAll(displayed)}
+            >
+              {allChecked
+                ? 'Deselect all'
+                : `Select all ${displayed.length} in view`}
+            </button>
+          )}
+          <div className="table-settings" ref={settingsRef}>
+            <button
+              type="button"
+              className={
+                'table-settings-btn' + (settingsOpen ? ' active' : '')
+              }
+              aria-label="Table settings"
+              aria-expanded={settingsOpen}
+              aria-haspopup="menu"
+              onClick={() => setSettingsOpen((v) => !v)}
+            >
+              <GearIcon />
+            </button>
+            {settingsOpen && (
+              <div className="table-settings-menu" role="menu">
+                <div className="table-settings-section">
+                  <div className="table-settings-label">Columns</div>
+                  <label className="table-settings-check table-settings-check--locked">
+                    <input type="checkbox" checked disabled readOnly />
+                    Name
+                  </label>
+                  {TOGGLEABLE_COLS.map((col) => (
+                    <label key={col} className="table-settings-check">
+                      <input
+                        type="checkbox"
+                        checked={visible[col]}
+                        onChange={() =>
+                          setVisible((v) => ({ ...v, [col]: !v[col] }))
+                        }
+                      />
+                      {COL_LABELS[col]}
+                    </label>
+                  ))}
+                </div>
+                <div className="table-settings-section">
+                  <div className="table-settings-label">Rows</div>
+                  <div className="table-settings-rows">
+                    {ROW_LIMITS.map((limit) => (
+                      <button
+                        key={String(limit)}
+                        type="button"
+                        role="menuitemradio"
+                        aria-checked={rowLimit === limit}
+                        className={
+                          'table-settings-chip' +
+                          (rowLimit === limit ? ' active' : '')
+                        }
+                        onClick={() => setRowLimit(limit)}
+                      >
+                        {limit === 'all' ? 'All' : limit}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
       <div className="table-scroll">
         <div className="table-head-row" role="row">
-          <div />
-          {header('name', 'Name')}
-          {header('sender', 'Sender')}
-          {header('category', 'Category')}
-          {header('date', 'Date')}
-          {header('size', 'Size', true)}
+          <div className="cell-check">
+            <input
+              ref={selectAllRef}
+              type="checkbox"
+              checked={allChecked}
+              disabled={loading || error || displayed.length === 0}
+              aria-label={
+                allChecked
+                  ? 'Deselect all documents in view'
+                  : 'Select all documents in view'
+              }
+              onChange={() => onSelectAll(displayed)}
+            />
+          </div>
+          {header('name')}
+          {header('sender')}
+          {header('category')}
+          {header('date')}
+          {header('size', true)}
         </div>
         <div>
           {loading && (
@@ -308,7 +547,7 @@ export function DocumentTable({
               no documents match these filters
             </div>
           )}
-          {!loading && !error && sorted.length > 0 && rows}
+          {!loading && !error && displayed.length > 0 && rows}
         </div>
       </div>
       {children}
