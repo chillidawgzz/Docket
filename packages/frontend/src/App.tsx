@@ -1,10 +1,12 @@
 import { useCallback, useMemo, useState } from 'react'
+import type { Document } from './api/types'
 import { BulkBar } from './components/BulkBar'
 import { DocumentTable } from './components/DocumentTable'
 import { Drawer } from './components/Drawer'
 import { PreviewPanel } from './components/PreviewPanel'
 import { Sidebar } from './components/Sidebar'
 import { Topbar } from './components/Topbar'
+import { ViewModal } from './components/ViewModal'
 import { useDocuments } from './hooks/useDocuments'
 import { useFilters } from './hooks/useFilters'
 import { useSelection } from './hooks/useSelection'
@@ -28,6 +30,7 @@ export default function App() {
 
   const [previewId, setPreviewId] = useState<string | null>(null)
   const [activeDocId, setActiveDocId] = useState<string | null>(null)
+  const [viewDocId, setViewDocId] = useState<string | null>(null)
   const [showSidebar, setShowSidebar] = useState(false)
 
   const list = useMemo(() => filteredDocs(docs, filters), [docs, filters])
@@ -36,6 +39,9 @@ export default function App() {
     : null
   const drawerDoc = activeDocId
     ? (docs.find((d) => d.id === activeDocId) ?? null)
+    : null
+  const viewDoc = viewDocId
+    ? (docs.find((d) => d.id === viewDocId) ?? null)
     : null
 
   const closeMobileSidebar = useCallback(() => {
@@ -47,6 +53,10 @@ export default function App() {
     setActiveDocId((prev) => (prev === id ? null : id))
   }, [])
 
+  const onView = useCallback((doc: Document) => {
+    setViewDocId(doc.id)
+  }, [])
+
   const bodyClass =
     'body' +
     (previewId ? ' preview-open' : '') +
@@ -54,7 +64,12 @@ export default function App() {
 
   return (
     <>
-      <Drawer doc={drawerDoc} onClose={() => setActiveDocId(null)} />
+      <Drawer
+        doc={drawerDoc}
+        onClose={() => setActiveDocId(null)}
+        onView={onView}
+      />
+      <ViewModal doc={viewDoc} onClose={() => setViewDocId(null)} />
       <div className="app">
         <Topbar
           search={filters.search}
@@ -98,6 +113,7 @@ export default function App() {
           <PreviewPanel
             doc={previewDoc}
             onClose={() => setPreviewId(null)}
+            onView={onView}
           />
         </div>
       </div>

@@ -26,9 +26,10 @@ function BigFileIcon() {
 interface PreviewPanelProps {
   doc: Document | null
   onClose: () => void
+  onView: (doc: Document) => void
 }
 
-export function PreviewPanel({ doc, onClose }: PreviewPanelProps) {
+export function PreviewPanel({ doc, onClose, onView }: PreviewPanelProps) {
   const [expanded, setExpanded] = useState(false)
 
   useEffect(() => {
@@ -97,28 +98,51 @@ export function PreviewPanel({ doc, onClose }: PreviewPanelProps) {
             </div>
           )}
         </div>
-        <div className="preview-actions">
+        <div className="preview-actions preview-actions--stack">
           <button
             type="button"
-            className="btn-download"
-            onClick={() => {
-              window.location.href = downloadUrl(doc.id)
-            }}
+            className="btn-view"
+            onClick={() => onView(doc)}
           >
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
               <path
-                d="M12 3v12m0 0l-4-4m4 4l4-4M4 19h16"
+                d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"
                 stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
+                strokeWidth="1.8"
+              />
+              <circle
+                cx="12"
+                cy="12"
+                r="3"
+                stroke="currentColor"
+                strokeWidth="1.8"
               />
             </svg>
-            Download
+            View attachment
           </button>
-          <button type="button" className="btn-secondary" onClick={onClose}>
-            Close
-          </button>
+          <div className="preview-actions-row">
+            <button
+              type="button"
+              className="btn-download"
+              onClick={() => {
+                window.location.href = downloadUrl(doc.id)
+              }}
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
+                <path
+                  d="M12 3v12m0 0l-4-4m4 4l4-4M4 19h16"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+              Download
+            </button>
+            <button type="button" className="btn-secondary" onClick={onClose}>
+              Close
+            </button>
+          </div>
         </div>
         <div className={'email-block' + (expanded ? ' expanded' : '')}>
           <div className="email-label">
