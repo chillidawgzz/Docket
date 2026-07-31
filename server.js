@@ -35,8 +35,45 @@ console.warn = function(...args) {
 const app = express();
 const PORT = Number(process.env.PORT) || 8420;
 
+app.use(express.json({ limit: '1mb' }));
+
 app.get('/api/documents', (req, res) => {
   res.json(imapClient.getDocuments());
+});
+
+app.get('/api/tags', (req, res) => {
+  res.json(db.listTags());
+});
+
+app.patch('/api/documents/:id', (req, res) => {
+  try {
+    const id = req.params.id;
+    const { downloadFilename, tags } = req.body || {};
+    let updated = false;
+
+    if (downloadFilename !== undefined) {
+      if (!db.setDownloadFilename(id, downloadFilename)) {
+        return res.status(404).json({ error: 'not found' });
+      }
+      updated = true;
+    }
+    if (tags !== undefined) {
+      if (!Array.isArray(tags)) {
+        return res.status(400).json({ error: 'tags must be an array' });
+      }
+      if (!db.setDocumentTags(id, tags)) {
+        return res.status(404).json({ error: 'not found' });
+      }
+      updated = true;
+    }
+    if (!updated) {
+      return res.status(400).json({ error: 'no changes' });
+    }
+    const doc = imapClient.getDocuments().find((d) => d.id === id);
+    res.json(doc);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.get('/api/documents/:id/download', async (req, res) => {
@@ -101,21 +138,22 @@ app.get('/api/documents/:id/preview', async (req, res) => {
       return res.status(404).json({ error: 'not found' });
     }
 
-    if (!isPreviewable(file.filename, file.contentType)) {
-      console.log(`[preview] Unsupported type: ${file.contentType} (${file.filename})`);
+    if (!isPreviewable(file.sourceFilename || file.filename, file.contentType)) {
+      console.log(`[preview] Unsupported type: ${file.contentType} (${file.sourceFilename || file.filename})`);
       return res.status(415).json({
         error: 'preview not available',
         contentType: file.contentType,
-        filename: file.filename,
+        filename: file.sourceFilename || file.filename,
       });
     }
 
-    const contentType = resolveContentType(file.filename, file.contentType);
-    console.log(`[preview] Serving ${file.filename} as ${contentType} (${file.buffer.length} bytes)`);
+    const previewName = file.sourceFilename || file.filename;
+    const contentType = resolveContentType(previewName, file.contentType);
+    console.log(`[preview] Serving ${previewName} as ${contentType} (${file.buffer.length} bytes)`);
     res.setHeader('Content-Type', contentType);
-    res.setHeader('X-Filename', encodeURIComponent(file.filename));
+    res.setHeader('X-Filename', encodeURIComponent(previewName));
     res.setHeader('Cache-Control', 'private, max-age=300');
-    res.setHeader('Content-Disposition', `inline; filename="${file.filename.replace(/"/g, '')}"`);
+    res.setHeader('Content-Disposition', `inline; filename="${previewName.replace(/"/g, '')}"`);
     res.send(file.buffer);
   } catch (err) {
     console.error(`[preview] Error: ${err.message}`);

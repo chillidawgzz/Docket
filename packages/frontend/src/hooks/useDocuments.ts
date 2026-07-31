@@ -25,5 +25,15 @@ export function useDocuments() {
     void load()
   }, [load])
 
-  return { docs, loading, error, reload: load }
+  const upsertDoc = useCallback((doc: Document) => {
+    setDocs((prev) => {
+      const idx = prev.findIndex((d) => d.id === doc.id)
+      if (idx < 0) return [doc, ...prev]
+      const next = [...prev]
+      next[idx] = doc
+      return next
+    })
+  }, [])
+
+  return { docs, loading, error, reload: load, upsertDoc }
 }

@@ -1,11 +1,14 @@
-import type { CategoryKey, Document } from '../api/types'
-import { CATEGORIES } from './categories'
+import type { Document } from '../api/types'
+
+export type TagMode = 'and' | 'or'
 
 export interface FilterState {
   search: string
   senderFilter: string | null
-  categoryFilter: CategoryKey | null
-  yearFilter: number | null
+  tagFilters: string[]
+  tagMode: TagMode
+  dateFrom: string | null // YYYY-MM-DD
+  dateTo: string | null
 }
 
 export function bySenderName(docs: Document[]) {
@@ -27,37 +30,59 @@ export function bySenderName(docs: Document[]) {
   return Object.values(map).sort((a, b) => b.count - a.count)
 }
 
-export function byCategory(docs: Document[]) {
-  const map: Record<string, { key: CategoryKey; count: number }> = {}
+export function byTag(docs: Document[]) {
+  const map: Record<string, number> = {}
   for (const d of docs) {
-    if (!map[d.category]) map[d.category] = { key: d.category, count: 0 }
-    map[d.category].count++
+    for (const tag of d.tags) {
+      map[tag] = (map[tag] || 0) + 1
+    }
   }
-  return (Object.keys(CATEGORIES) as CategoryKey[])
-    .map((k) => map[k] ?? { key: k, count: 0 })
-    .filter((c) => c.count > 0)
+  return Object.entries(map)
+    .map(([name, count]) => ({ name, count }))
+    .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }))
 }
 
-export function allYears(docs: Document[]): number[] {
-  const set = new Set<number>()
-  for (const d of docs) set.add(d.date.getFullYear())
-  return Array.from(set).sort((a, b) => b - a)
+function dayStart(isoDate: string): number {
+  return new Date(isoDate + 'T00:00:00').getTime()
+}
+
+function dayEnd(isoDate: string): number {
+  return new Date(isoDate + 'T23:59:59.999').getTime()
 }
 
 export function filteredDocs(docs: Document[], state: FilterState): Document[] {
   const q = state.search.trim().toLowerCase()
+  const fromTs = state.dateFrom ? dayStart(state.dateFrom) : null
+  const toTs = state.dateTo ? dayEnd(state.dateTo) : null
+
   return docs.filter((d) => {
     if (state.senderFilter && d.sender.name !== state.senderFilter) return false
-    if (state.categoryFilter && d.category !== state.categoryFilter) return false
-    if (state.yearFilter && d.date.getFullYear() !== state.yearFilter)
-      return false
+
+    if (state.tagFilters.length) {
+      const tags = d.tags.map((t) => t.toLowerCase())
+      const selected = state.tagFilters.map((t) => t.toLowerCase())
+      if (state.tagMode === 'and') {
+        if (!selected.every((t) => tags.includes(t))) return false
+      } else if (!selected.some((t) => tags.includes(t))) {
+        return false
+      }
+    }
+
+    const t = d.date.getTime()
+    if (fromTs != null && t < fromTs) return false
+    if (toTs != null && t > toTs) return false
+
     if (q) {
       const hay = (
         d.filename +
         ' ' +
+        (d.downloadFilename || '') +
+        ' ' +
         d.sender.name +
         ' ' +
-        d.email.subject
+        d.email.subject +
+        ' ' +
+        d.tags.join(' ')
       ).toLowerCase()
       if (!hay.includes(q)) return false
     }

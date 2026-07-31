@@ -7,9 +7,9 @@ import {
   type ReactNode,
 } from 'react'
 import type { Document } from '../api/types'
-import { CATEGORIES } from '../lib/categories'
 import { formatShortDate, formatSize, monthKey, monthLabel } from '../lib/format'
 import { sortDocs, type SortDir, type SortKey } from '../lib/sort'
+import { tagColor } from '../lib/tagColor'
 
 function FileIcon() {
   return (
@@ -33,68 +33,95 @@ function FileIcon() {
 function GearIcon() {
   return (
     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="1.7" />
       <path
-        d="M12 15.5a3.5 3.5 0 100-7 3.5 3.5 0 000 7z"
+        d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2M4.9 4.9l1.6 1.6M17.5 17.5l1.6 1.6M19.1 4.9l-1.6 1.6M6.5 17.5l-1.6 1.6"
         stroke="currentColor"
         strokeWidth="1.7"
-      />
-      <path
-        d="M19.4 13.5v-3l1.8-1.4-1.5-2.6-2.2.5a6.8 6.8 0 00-1.5-.9L15.5 3h-3l-.5 2.1a6.8 6.8 0 00-1.5.9l-2.2-.5-1.5 2.6L8.6 10.5v3l-1.8 1.4 1.5 2.6 2.2-.5c.5.4 1 .7 1.5.9L12.5 21h3l.5-2.1c.5-.2 1-.5 1.5-.9l2.2.5 1.5-2.6-1.8-1.4z"
-        stroke="currentColor"
-        strokeWidth="1.7"
-        strokeLinejoin="round"
+        strokeLinecap="round"
       />
     </svg>
   )
 }
 
-type ColKey = 'name' | 'sender' | 'category' | 'date' | 'size'
+function EditIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M4 20h4l10.5-10.5-4-4L4 16v4z"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinejoin="round"
+      />
+      <path d="M13.5 6.5l4 4" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+type ColKey =
+  | 'name'
+  | 'downloadFilename'
+  | 'sender'
+  | 'tags'
+  | 'date'
+  | 'size'
 type RowLimit = 10 | 50 | 100 | 200 | 'all'
 
 const COL_TO_SORT: Record<ColKey, SortKey> = {
   name: 'filename',
+  downloadFilename: 'downloadFilename',
   sender: 'sender',
-  category: 'category',
+  tags: 'tags',
   date: 'date',
   size: 'size',
 }
 
 const COL_LABELS: Record<ColKey, string> = {
   name: 'Name',
+  downloadFilename: 'Download as',
   sender: 'Sender',
-  category: 'Category',
+  tags: 'Tags',
   date: 'Date',
   size: 'Size',
 }
 
-const TOGGLEABLE_COLS: ColKey[] = ['sender', 'category', 'date', 'size']
+const TOGGLEABLE_COLS: ColKey[] = [
+  'downloadFilename',
+  'sender',
+  'tags',
+  'date',
+  'size',
+]
 const ROW_LIMITS: RowLimit[] = [10, 50, 100, 200, 'all']
 
 const DEFAULT_WIDTHS: Record<ColKey, number> = {
-  name: 280,
-  sender: 150,
-  category: 120,
+  name: 240,
+  downloadFilename: 160,
+  sender: 140,
+  tags: 180,
   date: 96,
   size: 76,
 }
 
 const MIN_WIDTHS: Record<ColKey, number> = {
   name: 120,
+  downloadFilename: 100,
   sender: 80,
-  category: 80,
+  tags: 100,
   date: 64,
   size: 56,
 }
 
 const DEFAULT_VISIBLE: Record<ColKey, boolean> = {
   name: true,
+  downloadFilename: true,
   sender: true,
-  category: true,
+  tags: true,
   date: true,
   size: true,
 }
 
-const SETTINGS_KEY = 'docket.tableSettings'
+const SETTINGS_KEY = 'docket.tableSettings.v2'
 
 type TableSettings = {
   visible: Record<ColKey, boolean>
@@ -132,21 +159,27 @@ interface DocumentTableProps {
   onRowActivate: (id: string) => void
   onSelectAll: (ids: Document[]) => void
   onRetry: () => void
+  onEditTags: (doc: Document) => void
+  onEditFilename: (doc: Document) => void
   children?: ReactNode
 }
 
-export function DocumentTable({
-  list,
-  loading,
-  error,
-  checked,
-  previewId,
-  onToggleCheck,
-  onRowActivate,
-  onSelectAll,
-  onRetry,
-  children,
-}: DocumentTableProps) {
+export function DocumentTable(props: DocumentTableProps) {
+  const {
+    list,
+    loading,
+    error,
+    checked,
+    previewId,
+    onToggleCheck,
+    onRowActivate,
+    onSelectAll,
+    onRetry,
+    onEditTags,
+    onEditFilename,
+    children,
+  } = props
+
   const initial = useMemo(() => loadSettings(), [])
   const [sortKey, setSortKey] = useState<SortKey>('date')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
@@ -155,11 +188,8 @@ export function DocumentTable({
   const [rowLimit, setRowLimit] = useState<RowLimit>(initial.rowLimit)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const settingsRef = useRef<HTMLDivElement>(null)
-  const dragRef = useRef<{
-    col: ColKey
-    startX: number
-    startW: number
-  } | null>(null)
+  const selectAllRef = useRef<HTMLInputElement>(null)
+  const dragRef = useRef<{ col: ColKey; startX: number; startW: number } | null>(null)
 
   useEffect(() => {
     localStorage.setItem(
@@ -171,9 +201,7 @@ export function DocumentTable({
   useEffect(() => {
     if (!settingsOpen) return
     const onDown = (e: MouseEvent) => {
-      if (!settingsRef.current?.contains(e.target as Node)) {
-        setSettingsOpen(false)
-      }
+      if (!settingsRef.current?.contains(e.target as Node)) setSettingsOpen(false)
     }
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setSettingsOpen(false)
@@ -186,34 +214,22 @@ export function DocumentTable({
     }
   }, [settingsOpen])
 
-  const sorted = useMemo(
-    () => sortDocs(list, sortKey, sortDir),
-    [list, sortKey, sortDir],
-  )
-
+  const sorted = useMemo(() => sortDocs(list, sortKey, sortDir), [list, sortKey, sortDir])
   const displayed = useMemo(() => {
     if (rowLimit === 'all') return sorted
     return sorted.slice(0, rowLimit)
   }, [sorted, rowLimit])
 
-  const allChecked =
-    displayed.length > 0 && displayed.every((d) => checked.has(d.id))
-  const someChecked =
-    displayed.some((d) => checked.has(d.id)) && !allChecked
-  const selectAllRef = useRef<HTMLInputElement>(null)
+  const allChecked = displayed.length > 0 && displayed.every((d) => checked.has(d.id))
+  const someChecked = displayed.some((d) => checked.has(d.id)) && !allChecked
 
   useEffect(() => {
-    if (selectAllRef.current) {
-      selectAllRef.current.indeterminate = someChecked
-    }
+    if (selectAllRef.current) selectAllRef.current.indeterminate = someChecked
   }, [someChecked])
 
   const [isMobile, setIsMobile] = useState(
-    () =>
-      typeof window !== 'undefined' &&
-      window.matchMedia('(max-width: 900px)').matches,
+    () => typeof window !== 'undefined' && window.matchMedia('(max-width: 900px)').matches,
   )
-
   useEffect(() => {
     const mq = window.matchMedia('(max-width: 900px)')
     const onChange = () => setIsMobile(mq.matches)
@@ -227,9 +243,7 @@ export function DocumentTable({
     return { ...visible, sender: false, size: false }
   }, [visible, isMobile])
 
-  const visibleCols = (Object.keys(COL_LABELS) as ColKey[]).filter(
-    (c) => effectiveVisible[c],
-  )
+  const visibleCols = (Object.keys(COL_LABELS) as ColKey[]).filter((c) => effectiveVisible[c])
 
   const toggleSort = useCallback((col: ColKey) => {
     const key = COL_TO_SORT[col]
@@ -243,38 +257,36 @@ export function DocumentTable({
     })
   }, [])
 
-  const onResizeStart = useCallback((col: ColKey, clientX: number) => {
-    dragRef.current = { col, startX: clientX, startW: widths[col] }
-
-    const onMove = (ev: MouseEvent) => {
-      const drag = dragRef.current
-      if (!drag) return
-      const delta = ev.clientX - drag.startX
-      const next = Math.max(MIN_WIDTHS[drag.col], drag.startW + delta)
-      setWidths((w) => ({ ...w, [drag.col]: next }))
-    }
-    const onUp = () => {
-      dragRef.current = null
-      window.removeEventListener('mousemove', onMove)
-      window.removeEventListener('mouseup', onUp)
-      document.body.classList.remove('col-resizing')
-    }
-    document.body.classList.add('col-resizing')
-    window.addEventListener('mousemove', onMove)
-    window.addEventListener('mouseup', onUp)
-  }, [widths])
+  const onResizeStart = useCallback(
+    (col: ColKey, clientX: number) => {
+      dragRef.current = { col, startX: clientX, startW: widths[col] }
+      const onMove = (ev: MouseEvent) => {
+        const drag = dragRef.current
+        if (!drag) return
+        const next = Math.max(MIN_WIDTHS[drag.col], drag.startW + (ev.clientX - drag.startX))
+        setWidths((w) => ({ ...w, [drag.col]: next }))
+      }
+      const onUp = () => {
+        dragRef.current = null
+        window.removeEventListener('mousemove', onMove)
+        window.removeEventListener('mouseup', onUp)
+        document.body.classList.remove('col-resizing')
+      }
+      document.body.classList.add('col-resizing')
+      window.addEventListener('mousemove', onMove)
+      window.addEventListener('mouseup', onUp)
+    },
+    [widths],
+  )
 
   const tableCols = [
     '36px',
     ...visibleCols.map((c) =>
-      c === 'name' ? `minmax(120px, ${widths.name}px)` : `${widths[c]}px`,
+      c === 'name' || c === 'tags' ? `minmax(100px, ${widths[c]}px)` : `${widths[c]}px`,
     ),
   ].join(' ')
 
-  const gridStyle = {
-    ['--table-cols' as string]: tableCols,
-  }
-
+  const gridStyle = { ['--table-cols' as string]: tableCols }
   const groupByMonth = sortKey === 'date'
   let currentMonth: string | null = null
   const rows: ReactNode[] = []
@@ -292,22 +304,24 @@ export function DocumentTable({
           )
         }
       }
-      const meta = CATEGORIES[d.category]
+      const iconColor = d.tags[0] ? tagColor(d.tags[0]) : 'var(--accent)'
       const isChecked = checked.has(d.id)
       const selected = previewId === d.id
       rows.push(
         <div
           key={d.id}
           className={
-            'doc-row unseen' +
-            (isChecked ? ' checked' : '') +
-            (selected ? ' selected' : '')
+            'doc-row unseen' + (isChecked ? ' checked' : '') + (selected ? ' selected' : '')
           }
           data-id={d.id}
           role="row"
           tabIndex={0}
           onClick={(e) => {
-            if ((e.target as HTMLElement).closest('[data-check]')) return
+            if (
+              (e.target as HTMLElement).closest('[data-check]') ||
+              (e.target as HTMLElement).closest('.cell-edit')
+            )
+              return
             onRowActivate(d.id)
           }}
           onKeyDown={(e) => {
@@ -328,13 +342,28 @@ export function DocumentTable({
           </div>
           {effectiveVisible.name && (
             <div className="cell-name" data-col="name">
-              <span
-                className="file-icon"
-                style={{ ['--cat' as string]: meta.color }}
-              >
+              <span className="file-icon" style={{ ['--cat' as string]: iconColor }}>
                 <FileIcon />
               </span>
               <span className="cell-filename">{d.filename}</span>
+            </div>
+          )}
+          {effectiveVisible.downloadFilename && (
+            <div className="cell-download" data-col="downloadFilename">
+              <span className="cell-download-text">
+                {d.downloadFilename || <span className="cell-muted">same as name</span>}
+              </span>
+              <button
+                type="button"
+                className="cell-edit"
+                aria-label="Edit download filename"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onEditFilename(d)
+                }}
+              >
+                <EditIcon />
+              </button>
             </div>
           )}
           {effectiveVisible.sender && (
@@ -342,14 +371,26 @@ export function DocumentTable({
               {d.sender.name}
             </div>
           )}
-          {effectiveVisible.category && (
-            <div
-              className="cat-tag"
-              data-col="category"
-              style={{ ['--cat' as string]: meta.color }}
-            >
-              <span className="facet-dot" />
-              {meta.label}
+          {effectiveVisible.tags && (
+            <div className="cell-tags" data-col="tags">
+              <div className="cell-tags-list">
+                {d.tags.map((t) => (
+                  <span key={t} className="tag-pill" style={{ ['--cat' as string]: tagColor(t) }}>
+                    {t}
+                  </span>
+                ))}
+              </div>
+              <button
+                type="button"
+                className="cell-edit"
+                aria-label="Edit tags"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onEditTags(d)
+                }}
+              >
+                <EditIcon />
+              </button>
             </div>
           )}
           {effectiveVisible.date && (
@@ -384,9 +425,7 @@ export function DocumentTable({
           type="button"
           className="th-sort"
           onClick={() => toggleSort(col)}
-          aria-sort={
-            active ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'
-          }
+          aria-sort={active ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}
         >
           <span>{COL_LABELS[col]}</span>
           <span className="th-indicator" aria-hidden="true">
@@ -409,10 +448,7 @@ export function DocumentTable({
   }
 
   const showingLimited =
-    !loading &&
-    !error &&
-    rowLimit !== 'all' &&
-    sorted.length > displayed.length
+    !loading && !error && rowLimit !== 'all' && sorted.length > displayed.length
 
   return (
     <main className="table-pane" style={gridStyle}>
@@ -439,20 +475,15 @@ export function DocumentTable({
               className="select-all-link"
               onClick={() => onSelectAll(displayed)}
             >
-              {allChecked
-                ? 'Deselect all'
-                : `Select all ${displayed.length} in view`}
+              {allChecked ? 'Deselect all' : `Select all ${displayed.length} in view`}
             </button>
           )}
           <div className="table-settings" ref={settingsRef}>
             <button
               type="button"
-              className={
-                'table-settings-btn' + (settingsOpen ? ' active' : '')
-              }
+              className={'table-settings-btn' + (settingsOpen ? ' active' : '')}
               aria-label="Table settings"
               aria-expanded={settingsOpen}
-              aria-haspopup="menu"
               onClick={() => setSettingsOpen((v) => !v)}
             >
               <GearIcon />
@@ -470,9 +501,7 @@ export function DocumentTable({
                       <input
                         type="checkbox"
                         checked={visible[col]}
-                        onChange={() =>
-                          setVisible((v) => ({ ...v, [col]: !v[col] }))
-                        }
+                        onChange={() => setVisible((v) => ({ ...v, [col]: !v[col] }))}
                       />
                       {COL_LABELS[col]}
                     </label>
@@ -485,11 +514,8 @@ export function DocumentTable({
                       <button
                         key={String(limit)}
                         type="button"
-                        role="menuitemradio"
-                        aria-checked={rowLimit === limit}
                         className={
-                          'table-settings-chip' +
-                          (rowLimit === limit ? ' active' : '')
+                          'table-settings-chip' + (rowLimit === limit ? ' active' : '')
                         }
                         onClick={() => setRowLimit(limit)}
                       >
@@ -520,32 +546,24 @@ export function DocumentTable({
             />
           </div>
           {header('name')}
+          {header('downloadFilename')}
           {header('sender')}
-          {header('category')}
+          {header('tags')}
           {header('date')}
           {header('size', true)}
         </div>
         <div>
-          {loading && (
-            <div className="empty-state">loading documents…</div>
-          )}
+          {loading && <div className="empty-state">loading documents…</div>}
           {error && (
             <div className="empty-state">
               couldn&apos;t load documents.{' '}
-              <button
-                type="button"
-                id="retryLoad"
-                style={{ cursor: 'pointer' }}
-                onClick={onRetry}
-              >
+              <button type="button" style={{ cursor: 'pointer' }} onClick={onRetry}>
                 Retry
               </button>
             </div>
           )}
           {!loading && !error && sorted.length === 0 && (
-            <div className="empty-state">
-              no documents match these filters
-            </div>
+            <div className="empty-state">no documents match these filters</div>
           )}
           {!loading && !error && displayed.length > 0 && rows}
         </div>

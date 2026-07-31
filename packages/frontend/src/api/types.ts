@@ -1,13 +1,3 @@
-export type CategoryKey =
-  | 'tax'
-  | 'utilities'
-  | 'banking'
-  | 'insurance'
-  | 'medical'
-  | 'housing'
-  | 'receipts'
-  | 'uncategorized'
-
 export interface Sender {
   name: string
   initials: string
@@ -24,8 +14,9 @@ export interface EmailMeta {
 export interface Document {
   id: string
   filename: string
+  downloadFilename: string | null
   sender: Sender
-  category: CategoryKey
+  tags: string[]
   date: Date
   size: number
   amount?: number | string | null
@@ -36,8 +27,9 @@ export interface Document {
 export interface DocumentDTO {
   id: string
   filename: string
+  downloadFilename?: string | null
   sender: Sender
-  category: CategoryKey
+  tags?: string[]
   date: string
   size: number
   amount?: number | string | null
@@ -49,6 +41,11 @@ export interface DocumentDTO {
     full?: string
   }
   label?: string
+}
+
+export interface TagInfo {
+  name: string
+  count: number
 }
 
 export interface SyncStatus {

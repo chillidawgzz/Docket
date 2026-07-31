@@ -80,6 +80,19 @@ export function Drawer({ doc, onClose, onView }: DrawerProps) {
                 <div className="drawer-meta-val">{doc.email.subject}</div>
               </div>
             </div>
+            <div className="drawer-email">
+              <div className="drawer-email-label">Email</div>
+              <div className="drawer-email-from">
+                {doc.email.from} · {formatFullDate(doc.email.date)}
+              </div>
+              {doc.email.full || doc.email.snippet ? (
+                <pre className="drawer-email-body">
+                  {doc.email.full || doc.email.snippet}
+                </pre>
+              ) : (
+                <div className="drawer-email-empty">No email body stored</div>
+              )}
+            </div>
           </div>
         )}
       </div>

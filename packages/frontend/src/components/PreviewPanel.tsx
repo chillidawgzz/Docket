@@ -1,8 +1,7 @@
-import { useEffect, useState } from 'react'
 import type { Document } from '../api/types'
 import { downloadUrl } from '../api/client'
-import { CATEGORIES } from '../lib/categories'
 import { formatFullDate, formatMoney, formatSize } from '../lib/format'
+import { tagColor } from '../lib/tagColor'
 
 function BigFileIcon() {
   return (
@@ -30,19 +29,14 @@ interface PreviewPanelProps {
 }
 
 export function PreviewPanel({ doc, onClose, onView }: PreviewPanelProps) {
-  const [expanded, setExpanded] = useState(false)
-
-  useEffect(() => {
-    setExpanded(false)
-  }, [doc?.id])
-
   if (!doc) return <aside className="preview-panel" aria-label="Document preview" />
 
-  const meta = CATEGORIES[doc.category]
+  const accent = doc.tags[0] ? tagColor(doc.tags[0]) : 'var(--accent)'
   const amount =
     doc.amount != null && doc.amount !== ''
       ? parseFloat(String(doc.amount))
       : NaN
+  const emailBody = doc.email.full || doc.email.snippet || ''
 
   return (
     <aside className="preview-panel" aria-label="Document preview">
@@ -66,18 +60,29 @@ export function PreviewPanel({ doc, onClose, onView }: PreviewPanelProps) {
         </div>
         <div
           className="preview-icon"
-          style={{ ['--cat' as string]: meta.color }}
+          style={{ ['--cat' as string]: accent }}
         >
           <BigFileIcon />
         </div>
         <div className="preview-filename">{doc.filename}</div>
-        <div
-          className="preview-cat cat-tag"
-          style={{ ['--cat' as string]: meta.color }}
-        >
-          <span className="facet-dot" />
-          {meta.label}
-        </div>
+        {doc.downloadFilename && (
+          <div className="preview-download-name">
+            downloads as <span className="mono">{doc.downloadFilename}</span>
+          </div>
+        )}
+        {doc.tags.length > 0 && (
+          <div className="preview-tags">
+            {doc.tags.map((t) => (
+              <span
+                key={t}
+                className="tag-pill"
+                style={{ ['--cat' as string]: tagColor(t) }}
+              >
+                {t}
+              </span>
+            ))}
+          </div>
+        )}
         <div className="preview-meta">
           <div className="preview-meta-row">
             <span className="k">Sender</span>
@@ -98,26 +103,24 @@ export function PreviewPanel({ doc, onClose, onView }: PreviewPanelProps) {
             </div>
           )}
         </div>
+        <div className="email-block email-block--open">
+          <div className="email-label">Email</div>
+          <div className="email-subject">{doc.email.subject}</div>
+          <div className="email-from">
+            {doc.email.from} · {formatFullDate(doc.email.date)}
+          </div>
+          {emailBody ? (
+            <pre className="email-body">{emailBody}</pre>
+          ) : (
+            <div className="email-empty">No email body stored</div>
+          )}
+        </div>
         <div className="preview-actions preview-actions--stack">
           <button
             type="button"
             className="btn-view"
             onClick={() => onView(doc)}
           >
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
-              <path
-                d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"
-                stroke="currentColor"
-                strokeWidth="1.8"
-              />
-              <circle
-                cx="12"
-                cy="12"
-                r="3"
-                stroke="currentColor"
-                strokeWidth="1.8"
-              />
-            </svg>
             View attachment
           </button>
           <div className="preview-actions-row">
@@ -128,56 +131,12 @@ export function PreviewPanel({ doc, onClose, onView }: PreviewPanelProps) {
                 window.location.href = downloadUrl(doc.id)
               }}
             >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
-                <path
-                  d="M12 3v12m0 0l-4-4m4 4l4-4M4 19h16"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
               Download
             </button>
             <button type="button" className="btn-secondary" onClick={onClose}>
               Close
             </button>
           </div>
-        </div>
-        <div className={'email-block' + (expanded ? ' expanded' : '')}>
-          <div className="email-label">
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none">
-              <path
-                d="M3 6h18v13a1 1 0 01-1 1H4a1 1 0 01-1-1V6z"
-                stroke="currentColor"
-                strokeWidth="1.6"
-              />
-              <path
-                d="M3 6l9 7 9-7"
-                stroke="currentColor"
-                strokeWidth="1.6"
-                strokeLinejoin="round"
-              />
-            </svg>
-            Received via email
-          </div>
-          <div className="email-subject">{doc.email.subject}</div>
-          <div className="email-from">
-            {doc.email.from} · {formatFullDate(doc.email.date)}
-          </div>
-          <div className="email-snippet">{doc.email.snippet}</div>
-          {doc.email.full && (
-            <>
-              <div className="email-full">{doc.email.full}</div>
-              <button
-                type="button"
-                className="email-toggle"
-                onClick={() => setExpanded((v) => !v)}
-              >
-                {expanded ? 'Show less' : 'View full email'}
-              </button>
-            </>
-          )}
         </div>
       </div>
     </aside>

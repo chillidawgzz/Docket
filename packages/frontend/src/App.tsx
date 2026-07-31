@@ -1,8 +1,11 @@
 import { useCallback, useMemo, useState } from 'react'
+import { patchDocument } from './api/client'
 import type { Document } from './api/types'
 import { BulkBar } from './components/BulkBar'
 import { DocumentTable } from './components/DocumentTable'
 import { Drawer } from './components/Drawer'
+import { EditFilenameModal } from './components/EditFilenameModal'
+import { EditTagsModal } from './components/EditTagsModal'
 import { PreviewPanel } from './components/PreviewPanel'
 import { Sidebar } from './components/Sidebar'
 import { Topbar } from './components/Topbar'
@@ -11,17 +14,22 @@ import { useDocuments } from './hooks/useDocuments'
 import { useFilters } from './hooks/useFilters'
 import { useSelection } from './hooks/useSelection'
 import { useSyncStatus } from './hooks/useSyncStatus'
+import { useTags } from './hooks/useTags'
 import { filteredDocs } from './lib/filters'
 import './styles/app.css'
 
 export default function App() {
-  const { docs, loading, error, reload } = useDocuments()
+  const { docs, loading, error, reload, upsertDoc } = useDocuments()
+  const { tagNames, reloadTags } = useTags(docs)
   const {
     filters,
     setSearch,
     toggleSender,
-    toggleCategory,
-    toggleYear,
+    toggleTagFilter,
+    setTagFilters,
+    setTagMode,
+    setDateFrom,
+    setDateTo,
     clearFilters,
     anyFilter,
   } = useFilters()
@@ -31,9 +39,12 @@ export default function App() {
   const [previewId, setPreviewId] = useState<string | null>(null)
   const [activeDocId, setActiveDocId] = useState<string | null>(null)
   const [viewDocId, setViewDocId] = useState<string | null>(null)
+  const [editTagsId, setEditTagsId] = useState<string | null>(null)
+  const [editFilenameId, setEditFilenameId] = useState<string | null>(null)
   const [showSidebar, setShowSidebar] = useState(false)
 
   const list = useMemo(() => filteredDocs(docs, filters), [docs, filters])
+
   const previewDoc = previewId
     ? (docs.find((d) => d.id === previewId) ?? null)
     : null
@@ -42,6 +53,12 @@ export default function App() {
     : null
   const viewDoc = viewDocId
     ? (docs.find((d) => d.id === viewDocId) ?? null)
+    : null
+  const editTagsDoc = editTagsId
+    ? (docs.find((d) => d.id === editTagsId) ?? null)
+    : null
+  const editFilenameDoc = editFilenameId
+    ? (docs.find((d) => d.id === editFilenameId) ?? null)
     : null
 
   const closeMobileSidebar = useCallback(() => {
@@ -70,6 +87,28 @@ export default function App() {
         onView={onView}
       />
       <ViewModal doc={viewDoc} onClose={() => setViewDocId(null)} />
+      <EditTagsModal
+        doc={editTagsDoc}
+        suggestions={tagNames}
+        onClose={() => setEditTagsId(null)}
+        onSave={async (tags) => {
+          if (!editTagsDoc) return
+          const updated = await patchDocument(editTagsDoc.id, { tags })
+          upsertDoc(updated)
+          await reloadTags()
+        }}
+      />
+      <EditFilenameModal
+        doc={editFilenameDoc}
+        onClose={() => setEditFilenameId(null)}
+        onSave={async (downloadFilename) => {
+          if (!editFilenameDoc) return
+          const updated = await patchDocument(editFilenameDoc.id, {
+            downloadFilename: downloadFilename || null,
+          })
+          upsertDoc(updated)
+        }}
+      />
       <div className="app">
         <Topbar
           search={filters.search}
@@ -83,18 +122,18 @@ export default function App() {
             docs={docs}
             filters={filters}
             anyFilter={anyFilter}
+            tagSuggestions={tagNames}
             onToggleSender={(name) => {
               toggleSender(name)
               closeMobileSidebar()
             }}
-            onToggleCategory={(key) => {
-              toggleCategory(key)
-              closeMobileSidebar()
+            onToggleTag={(tag) => {
+              toggleTagFilter(tag)
             }}
-            onToggleYear={(year) => {
-              toggleYear(year)
-              closeMobileSidebar()
-            }}
+            onSetTagFilters={setTagFilters}
+            onSetTagMode={setTagMode}
+            onSetDateFrom={setDateFrom}
+            onSetDateTo={setDateTo}
             onClearFilters={clearFilters}
           />
           <DocumentTable
@@ -107,6 +146,8 @@ export default function App() {
             onRowActivate={onRowActivate}
             onSelectAll={(rows) => selectAll(rows)}
             onRetry={() => void reload()}
+            onEditTags={(doc) => setEditTagsId(doc.id)}
+            onEditFilename={(doc) => setEditFilenameId(doc.id)}
           >
             <BulkBar docs={docs} checked={checked} onClear={clear} />
           </DocumentTable>

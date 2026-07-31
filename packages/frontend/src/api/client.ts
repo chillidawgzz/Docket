@@ -1,13 +1,20 @@
-import type { Document, DocumentDTO, SyncEvent, SyncStatus } from './types'
+import type { Document, DocumentDTO, SyncEvent, SyncStatus, TagInfo } from './types'
 
 function normalizeDoc(d: DocumentDTO): Document {
   return {
-    ...d,
+    id: d.id,
+    filename: d.filename,
+    downloadFilename: d.downloadFilename ?? null,
+    sender: d.sender,
+    tags: Array.isArray(d.tags) ? d.tags : [],
     date: new Date(d.date),
+    size: d.size,
+    amount: d.amount,
     email: {
       ...d.email,
       date: new Date(d.email.date),
     },
+    label: d.label,
   }
 }
 
@@ -18,6 +25,25 @@ export async function fetchDocuments(): Promise<Document[]> {
   return data
     .map(normalizeDoc)
     .sort((a, b) => b.date.getTime() - a.date.getTime())
+}
+
+export async function fetchTags(): Promise<TagInfo[]> {
+  const res = await fetch('/api/tags')
+  if (!res.ok) throw new Error('tags failed')
+  return res.json()
+}
+
+export async function patchDocument(
+  id: string,
+  body: { downloadFilename?: string | null; tags?: string[] },
+): Promise<Document> {
+  const res = await fetch(`/api/documents/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) throw new Error('update failed')
+  return normalizeDoc(await res.json())
 }
 
 export async function fetchStatus(): Promise<SyncStatus> {
@@ -45,7 +71,6 @@ export async function fetchPreview(
   if (!res.ok) return null
   const contentType = res.headers.get('content-type') || ''
   if (contentType.includes('application/json')) {
-    // Error payload from older servers
     return null
   }
   const rawName =
