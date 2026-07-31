@@ -1,8 +1,7 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { Document } from '../api/types'
-import {
-  type AttachmentPreviewState,
-} from '../hooks/useAttachmentPreview'
+import { previewUrl } from '../api/client'
+import { type AttachmentPreviewState } from '../hooks/useAttachmentPreview'
 import { renderPdfFirstPage } from '../lib/pdfRender'
 
 interface AttachmentBodyProps {
@@ -17,25 +16,25 @@ export function AttachmentBody({
   preview,
   variant,
 }: AttachmentBodyProps) {
-  const {
-    mode,
-    message,
-    objectUrl,
-    pdfData,
-    textContent,
-    ics,
-    eml,
-    sheetRows,
-  } = preview
+  const { mode, message, pdfData, textContent, ics, eml, sheetRows } = preview
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const [mediaError, setMediaError] = useState(false)
+  const src = previewUrl(doc.id)
+
+  useEffect(() => {
+    setMediaError(false)
+  }, [doc.id, mode])
 
   useEffect(() => {
     if (variant !== 'compact' || mode !== 'pdf' || !pdfData || !canvasRef.current)
       return
     let cancelled = false
     void (async () => {
-      await renderPdfFirstPage(pdfData, canvasRef.current!)
+      const status = await renderPdfFirstPage(pdfData, canvasRef.current!)
       if (cancelled) return
+      if (status === 'password' || status === 'error') {
+        setMediaError(true)
+      }
     })()
     return () => {
       cancelled = true
@@ -46,7 +45,12 @@ export function AttachmentBody({
     mode === 'loading' ||
     mode === 'none' ||
     mode === 'password' ||
-    mode === 'error'
+    mode === 'error' ||
+    mediaError
+
+  const statusText = mediaError
+    ? 'Could not display file'
+    : message
 
   const tall =
     mode === 'text' ||
@@ -58,26 +62,45 @@ export function AttachmentBody({
   if (variant === 'full') {
     return (
       <div className="view-modal-body">
-        {showMessage && <div className="view-modal-message">{message}</div>}
-        {mode === 'pdf' && objectUrl && (
+        {showMessage && mode !== 'image' && mode !== 'pdf' && mode !== 'audio' && mode !== 'video' && (
+          <div className="view-modal-message">{statusText}</div>
+        )}
+        {mode === 'loading' && (
+          <div className="view-modal-message">Loading…</div>
+        )}
+        {mode === 'pdf' && !mediaError && (
           <iframe
             className="view-modal-frame"
             title={doc.filename}
-            src={objectUrl}
+            src={src}
           />
         )}
-        {mode === 'image' && objectUrl && (
+        {mode === 'image' && !mediaError && (
           <img
-            src={objectUrl}
+            src={src}
             className="view-modal-img"
             alt={doc.filename}
+            onError={() => setMediaError(true)}
           />
         )}
-        {mode === 'audio' && objectUrl && (
-          <audio className="view-modal-audio" controls src={objectUrl} />
+        {mode === 'image' && mediaError && (
+          <div className="view-modal-message">Could not display image</div>
         )}
-        {mode === 'video' && objectUrl && (
-          <video className="view-modal-video" controls src={objectUrl} />
+        {mode === 'audio' && (
+          <audio
+            className="view-modal-audio"
+            controls
+            src={src}
+            onError={() => setMediaError(true)}
+          />
+        )}
+        {mode === 'video' && (
+          <video
+            className="view-modal-video"
+            controls
+            src={src}
+            onError={() => setMediaError(true)}
+          />
         )}
         {(mode === 'text' || mode === 'docx') && (
           <pre className="view-modal-text">{textContent}</pre>
@@ -157,6 +180,9 @@ export function AttachmentBody({
             </table>
           </div>
         )}
+        {(mode === 'none' || mode === 'error') && (
+          <div className="view-modal-message">{statusText}</div>
+        )}
       </div>
     )
   }
@@ -167,22 +193,42 @@ export function AttachmentBody({
         'drawer-preview-box' + (tall ? ' drawer-preview-box--tall' : '')
       }
     >
-      {showMessage && message}
-      {mode === 'pdf' && (
+      {mode === 'loading' && 'Loading…'}
+      {showMessage &&
+        mode !== 'loading' &&
+        mode !== 'image' &&
+        !(mode === 'pdf' && !!pdfData) &&
+        statusText}
+      {mode === 'pdf' && pdfData && !mediaError && (
         <canvas ref={canvasRef} className="drawer-preview-canvas" />
       )}
-      {mode === 'image' && objectUrl && (
+      {mode === 'pdf' && !pdfData && (
+        <span className="drawer-preview-loading">Loading…</span>
+      )}
+      {mode === 'image' && !mediaError && (
         <img
-          src={objectUrl}
+          src={src}
           className="drawer-preview-img"
           alt={doc.filename}
+          onError={() => setMediaError(true)}
         />
       )}
-      {mode === 'audio' && objectUrl && (
-        <audio className="drawer-preview-audio" controls src={objectUrl} />
+      {mode === 'image' && mediaError && 'Could not display image'}
+      {mode === 'audio' && (
+        <audio
+          className="drawer-preview-audio"
+          controls
+          src={src}
+          onError={() => setMediaError(true)}
+        />
       )}
-      {mode === 'video' && objectUrl && (
-        <video className="drawer-preview-video" controls src={objectUrl} />
+      {mode === 'video' && (
+        <video
+          className="drawer-preview-video"
+          controls
+          src={src}
+          onError={() => setMediaError(true)}
+        />
       )}
       {(mode === 'text' || mode === 'docx') && (
         <pre className="drawer-preview-text">{textContent}</pre>

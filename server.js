@@ -113,7 +113,9 @@ app.get('/api/documents/:id/preview', async (req, res) => {
     const contentType = resolveContentType(file.filename, file.contentType);
     console.log(`[preview] Serving ${file.filename} as ${contentType} (${file.buffer.length} bytes)`);
     res.setHeader('Content-Type', contentType);
-    res.setHeader('X-Filename', file.filename);
+    res.setHeader('X-Filename', encodeURIComponent(file.filename));
+    res.setHeader('Cache-Control', 'private, max-age=300');
+    res.setHeader('Content-Disposition', `inline; filename="${file.filename.replace(/"/g, '')}"`);
     res.send(file.buffer);
   } catch (err) {
     console.error(`[preview] Error: ${err.message}`);

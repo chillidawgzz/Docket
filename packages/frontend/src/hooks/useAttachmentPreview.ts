@@ -50,10 +50,16 @@ const empty: AttachmentPreviewState = {
 
 export function useAttachmentPreview(
   doc: Document | null,
-  options?: { maxSheetRows?: number; maxTextChars?: number },
+  options?: {
+    maxSheetRows?: number
+    maxTextChars?: number
+    /** Fetch PDF bytes for first-page canvas (drawer). Modal uses iframe URL. */
+    needPdfBytes?: boolean
+  },
 ): AttachmentPreviewState {
   const maxSheetRows = options?.maxSheetRows ?? 500
   const maxTextChars = options?.maxTextChars ?? 500_000
+  const needPdfBytes = options?.needPdfBytes ?? false
   const [state, setState] = useState<AttachmentPreviewState>(empty)
 
   useEffect(() => {
@@ -63,8 +69,25 @@ export function useAttachmentPreview(
     }
 
     let cancelled = false
-    let url: string | null = null
     setState({ ...empty, mode: 'loading', message: 'Loading…' })
+
+    // Fast path: browser can load these via the preview URL directly
+    const nameKind = detectPreviewKind(
+      'application/octet-stream',
+      doc.filename,
+    )
+    if (
+      nameKind === 'image' ||
+      nameKind === 'audio' ||
+      nameKind === 'video'
+    ) {
+      setState({ ...empty, mode: nameKind })
+      return
+    }
+    if (nameKind === 'pdf' && !needPdfBytes) {
+      setState({ ...empty, mode: 'pdf' })
+      return
+    }
 
     void (async () => {
       try {
@@ -86,42 +109,22 @@ export function useAttachmentPreview(
         )
 
         if (kind === 'pdf') {
+          if (!needPdfBytes) {
+            setState({ ...empty, mode: 'pdf' })
+            return
+          }
           const buf = await result.blob.arrayBuffer()
           if (cancelled) return
-          const pdfBlob = new Blob([buf], { type: 'application/pdf' })
-          url = URL.createObjectURL(pdfBlob)
           setState({
             ...empty,
             mode: 'pdf',
-            objectUrl: url,
             pdfData: buf,
           })
           return
         }
 
-        if (kind === 'image') {
-          const type =
-            result.contentType === 'image/jpg' ||
-            result.contentType === 'image/pjpeg' ||
-            result.contentType === 'image/x-jpeg' ||
-            /\.jpe?g$/i.test(filename)
-              ? 'image/jpeg'
-              : result.contentType.startsWith('image/')
-                ? result.contentType.split(';')[0].trim()
-                : 'image/jpeg'
-          const imageBlob =
-            result.blob.type === type
-              ? result.blob
-              : new Blob([await result.blob.arrayBuffer()], { type })
-          if (cancelled) return
-          url = URL.createObjectURL(imageBlob)
-          setState({ ...empty, mode: 'image', objectUrl: url })
-          return
-        }
-
-        if (kind === 'audio' || kind === 'video') {
-          url = URL.createObjectURL(result.blob)
-          setState({ ...empty, mode: kind, objectUrl: url })
+        if (kind === 'image' || kind === 'audio' || kind === 'video') {
+          setState({ ...empty, mode: kind })
           return
         }
 
@@ -211,9 +214,8 @@ export function useAttachmentPreview(
 
     return () => {
       cancelled = true
-      if (url) URL.revokeObjectURL(url)
     }
-  }, [doc, maxSheetRows, maxTextChars])
+  }, [doc, maxSheetRows, maxTextChars, needPdfBytes])
 
   return state
 }

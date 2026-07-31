@@ -14,6 +14,7 @@ export function Drawer({ doc, onClose, onView }: DrawerProps) {
   const preview = useAttachmentPreview(doc, {
     maxSheetRows: 100,
     maxTextChars: 100_000,
+    needPdfBytes: true,
   })
 
   return (

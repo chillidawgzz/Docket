@@ -30,6 +30,10 @@ export function downloadUrl(id: string): string {
   return `/api/documents/${encodeURIComponent(id)}/download`
 }
 
+export function previewUrl(id: string): string {
+  return `/api/documents/${encodeURIComponent(id)}/preview`
+}
+
 export function zipUrl(ids: string[]): string {
   return `/api/documents/zip?ids=${ids.map(encodeURIComponent).join(',')}`
 }
@@ -44,10 +48,16 @@ export async function fetchPreview(
     // Error payload from older servers
     return null
   }
-  const filename =
+  const rawName =
     res.headers.get('x-filename') ||
     res.headers.get('content-disposition')?.match(/filename="?([^"]+)"?/)?.[1] ||
     ''
+  let filename = rawName
+  try {
+    filename = decodeURIComponent(rawName)
+  } catch {
+    /* keep raw */
+  }
   const blob = await res.blob()
   return { blob, contentType, filename }
 }

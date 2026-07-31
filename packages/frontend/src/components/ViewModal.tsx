@@ -13,6 +13,7 @@ export function ViewModal({ doc, onClose }: ViewModalProps) {
   const preview = useAttachmentPreview(doc, {
     maxSheetRows: 2000,
     maxTextChars: 1_000_000,
+    needPdfBytes: false,
   })
 
   useEffect(() => {
