@@ -4,8 +4,10 @@ const fs = require('fs');
 const express = require('express');
 const imapClient = require('./lib/imapClient');
 const db = require('./lib/db');
+const { resolveContentType, isPreviewable } = require('./lib/previewTypes');
 
 const LOG_FILE = path.join(__dirname, 'sync.log');
+const FRONTEND_DIST = path.join(__dirname, 'packages', 'frontend', 'dist');
 
 function log(msg) {
   const ts = new Date().toISOString();
@@ -32,8 +34,6 @@ console.warn = function(...args) {
 
 const app = express();
 const PORT = Number(process.env.PORT) || 8420;
-
-app.use(express.static(__dirname));
 
 app.get('/api/documents', (req, res) => {
   res.json(imapClient.getDocuments());
@@ -101,14 +101,18 @@ app.get('/api/documents/:id/preview', async (req, res) => {
       return res.status(404).json({ error: 'not found' });
     }
 
-    const contentType = file.contentType.toLowerCase();
-    if (!contentType.includes('pdf') && !contentType.includes('image/jpeg') && !contentType.includes('image/jpg')) {
-      console.log(`[preview] Unsupported type: ${contentType}`);
-      return res.json({ error: 'preview not available', contentType: file.contentType });
+    if (!isPreviewable(file.filename, file.contentType)) {
+      console.log(`[preview] Unsupported type: ${file.contentType} (${file.filename})`);
+      return res.status(415).json({
+        error: 'preview not available',
+        contentType: file.contentType,
+        filename: file.filename,
+      });
     }
 
-    console.log(`[preview] Serving ${file.filename} (${file.buffer.length} bytes)`);
-    res.setHeader('Content-Type', file.contentType);
+    const contentType = resolveContentType(file.filename, file.contentType);
+    console.log(`[preview] Serving ${file.filename} as ${contentType} (${file.buffer.length} bytes)`);
+    res.setHeader('Content-Type', contentType);
     res.setHeader('X-Filename', file.filename);
     res.send(file.buffer);
   } catch (err) {
@@ -136,8 +140,18 @@ app.get('/api/documents/:id/locked', async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
-  log(`Docket server listening on port ${PORT}`);
+if (fs.existsSync(FRONTEND_DIST)) {
+  app.use(express.static(FRONTEND_DIST));
+  app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api/')) return next();
+    res.sendFile(path.join(FRONTEND_DIST, 'index.html'));
+  });
+} else {
+  log(`Frontend dist not found at ${FRONTEND_DIST} — run: npm run build`);
+}
+
+app.listen(PORT, '0.0.0.0', () => {
+  log(`Docket server listening on 0.0.0.0:${PORT}`);
   db.init();
   log('Database initialized');
   imapClient.rebuildAttachmentIndex();

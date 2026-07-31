@@ -1,18 +1,3 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Docket — document archive</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-<script>
-  if(typeof pdfjsWorker !== 'undefined') pdfjsWorker.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-  if(typeof pdfjs !== 'undefined') pdfjs.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-</script>
-<style>
   :root{
     --bg:#0B0D10;
     --surface:#12151A;
@@ -697,6 +682,95 @@
     border-radius:var(--radius-s);
     object-fit:contain;
   }
+  .drawer-preview-box--tall{
+    height:auto;
+    min-height:280px;
+    max-height:55vh;
+    align-items:stretch;
+    justify-content:flex-start;
+  }
+  .drawer-preview-text{
+    margin:0;
+    padding:var(--space-3);
+    width:100%;
+    overflow:auto;
+    white-space:pre-wrap;
+    word-break:break-word;
+    font-family:var(--mono);
+    font-size:11.5px;
+    line-height:1.5;
+    color:var(--text-secondary);
+    text-align:left;
+  }
+  .drawer-preview-text--inline{
+    margin-top:var(--space-3);
+    padding:0;
+    max-height:220px;
+  }
+  .drawer-preview-audio,
+  .drawer-preview-video{
+    width:100%;
+    max-width:100%;
+  }
+  .drawer-preview-video{
+    max-height:260px;
+    background:#000;
+    border-radius:var(--radius-s);
+  }
+  .drawer-preview-card{
+    width:100%;
+    padding:var(--space-3);
+    text-align:left;
+    overflow:auto;
+  }
+  .drawer-card-title{
+    font-family:var(--mono);
+    font-size:13px;
+    font-weight:600;
+    color:var(--text);
+    margin-bottom:var(--space-3);
+  }
+  .drawer-card-row{
+    display:flex;
+    gap:var(--space-3);
+    font-size:11.5px;
+    margin-bottom:6px;
+  }
+  .drawer-card-row > span:first-child{
+    flex:none;
+    width:52px;
+    color:var(--text-tertiary);
+    font-family:var(--mono);
+  }
+  .drawer-card-row > span:last-child{
+    color:var(--text-secondary);
+    word-break:break-word;
+  }
+  .drawer-preview-table-wrap{
+    width:100%;
+    overflow:auto;
+    padding:var(--space-2);
+  }
+  .drawer-preview-table{
+    border-collapse:collapse;
+    width:100%;
+    font-family:var(--mono);
+    font-size:11px;
+    color:var(--text-secondary);
+  }
+  .drawer-preview-table td{
+    border:1px solid var(--border);
+    padding:4px 6px;
+    white-space:nowrap;
+    max-width:160px;
+    overflow:hidden;
+    text-overflow:ellipsis;
+  }
+  .drawer-preview-table tr:first-child td{
+    color:var(--text);
+    font-weight:600;
+    background:var(--bg);
+  }
   .drawer-meta{
     flex-shrink:0;
     display:flex;
@@ -785,95 +859,3 @@
     .cell-sender, .cell-size{display:none;}
     .search{max-width:none;}
   }
-</style>
-</head>
-<body>
-
-<!-- Drawer overlay -->
-<div class="drawer-overlay" id="drawerOverlay"></div>
-
-<!-- Drawer panel -->
-<div class="drawer" id="drawer">
-  <div class="drawer-header">
-    <h3 id="drawerTitle"></h3>
-    <button class="drawer-close" id="drawerClose">✕</button>
-  </div>
-  <div class="drawer-content" id="drawerContent"></div>
-</div>
-
-<div class="app">
-  <header class="topbar">
-    <button class="sidebar-toggle" id="sidebarToggle" aria-label="Toggle filters">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M3 6h18M3 12h18M3 18h18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
-    </button>
-    <div class="wordmark"><span class="prompt">~/</span>docket<span class="cursor">_</span></div>
-    <div class="search">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-        <circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="1.8"/>
-        <path d="M21 21l-4.3-4.3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
-      </svg>
-      <input type="search" id="searchInput" placeholder="grep filename, sender, subject…" aria-label="Search documents">
-    </div>
-    <div class="topbar-right">
-      <button id="syncBtn" style="background:none; border:1px solid var(--border); color:var(--text-secondary); padding:6px 12px; border-radius:var(--radius-s); font-size:12.5px; font-weight:600; cursor:pointer;">Sync</button>
-      <span><span class="sync-dot" id="syncDot" style="display:none;"></span><span id="syncText"></span></span>
-    </div>
-  </header>
-
-  <div class="body" id="appBody">
-    <aside class="sidebar" id="sidebar" aria-label="Filters">
-      <div class="sidebar-preview-section">
-        <label class="sidebar-preview-label">Preview</label>
-        <div class="sidebar-preview-box" id="sidebarPreviewBox">No document selected</div>
-      </div>
-      <div class="sidebar-section">
-        <div class="sidebar-head">Senders</div>
-        <div class="facet-list" id="senderList"></div>
-      </div>
-      <div class="sidebar-section">
-        <div class="sidebar-head">Category</div>
-        <div class="facet-list" id="categoryList"></div>
-      </div>
-      <div class="sidebar-section">
-        <div class="sidebar-head">Year</div>
-        <div class="year-chips" id="yearChips"></div>
-      </div>
-      <button class="clear-filters" id="clearFilters" hidden>
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-        Clear filters
-      </button>
-    </aside>
-
-    <main class="table-pane">
-      <div class="table-toolbar">
-        <div class="result-count" id="resultCount"></div>
-        <button class="select-all-link" id="selectAllBtn"></button>
-      </div>
-      <div class="table-scroll" id="tableScroll">
-        <div class="table-head-row" role="row">
-          <div></div>
-          <div>Name</div>
-          <div>Sender</div>
-          <div>Category</div>
-          <div>Date</div>
-          <div style="text-align:right;">Size</div>
-        </div>
-        <div id="tableBody"></div>
-      </div>
-      <div class="bulk-bar" id="bulkBar" hidden>
-        <span class="bulk-summary" id="bulkSummary"></span>
-        <button class="btn-download" id="downloadZip">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 19h16" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          Download .zip
-        </button>
-        <button class="btn-clear" id="clearSelection">Clear</button>
-      </div>
-    </main>
-
-    <aside class="preview-panel" id="previewPanel" aria-label="Document preview"></aside>
-  </div>
-</div>
-
-<script src="app.js"></script>
-</body>
-</html>
