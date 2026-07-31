@@ -2,6 +2,11 @@
 
 **An attachment-first Gmail client for people who live in their files, not their inbox.**
 
+> **Copyright © 2026 chillidawgzz — All Rights Reserved.**  
+> Source may be viewed. Copying, modifying, or redistributing requires permission. See [`LICENSE`](LICENSE).
+
+This repository includes the **full stack**: Express/IMAP/SQLite **backend** (`server.js`, `lib/`) and the React **frontend** (`packages/frontend`).
+
 Traditional email clients are **messaging-first**. Threads, unread counts, reply-all, and the inbox timeline are the product. Attachments are a secondary detail — something you open from inside a message, if you remember which message held the invoice, the lease, or the tax form.
 
 **Docket flips that constraint.**
@@ -9,6 +14,18 @@ Traditional email clients are **messaging-first**. Threads, unread counts, reply
 The unit of work is the **document** (PDF, image, spreadsheet, receipt, statement). The email is metadata that explains where the file came from. Search, filter, tag, preview, and download are organized around attachments — not conversations.
 
 If your real question is *“Where is that file someone emailed me?”* instead of *“What did they say?”*, Docket is built for that.
+
+---
+
+## Repository layout
+
+| Path | What it is |
+| --- | --- |
+| [`server.js`](server.js) | Express HTTP API, sync SSE, static UI hosting |
+| [`lib/`](lib/) | Backend: IMAP client, SQLite DB, attachment cache, preview types |
+| [`packages/frontend/`](packages/frontend/) | React + TypeScript SPA (Vite) |
+| [`LICENSE`](LICENSE) | Proprietary copyright — view only, not free to copy |
+| [`.env.example`](.env.example) | Required Gmail/IMAP config template (no secrets) |
 
 ---
 
@@ -135,11 +152,13 @@ See [`.env.example`](.env.example). Critical variables:
 
 ---
 
-## License
+## License / copyright
 
-**All Rights Reserved.** See [`LICENSE`](LICENSE).
+**Copyright © 2026 chillidawgzz. All Rights Reserved.**
 
-This repository is published so the source may be **viewed**. Copying, modifying, redistributing, or building on this code requires prior written permission. Viewing the repo does not grant a license to use the software beyond personal inspection of the source as hosted.
+Full terms: [`LICENSE`](LICENSE).
+
+This repository (backend and frontend) is published so the source may be **viewed**. You may **not** copy, reproduce, modify, merge, publish, distribute, sublicense, sell, or otherwise use this software or any substantial portion of it without prior written permission. Viewing the repo does not grant a license to use the code.
 
 ---
 
