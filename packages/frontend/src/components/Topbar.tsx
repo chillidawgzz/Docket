@@ -7,6 +7,7 @@ interface TopbarProps {
   onToggleSidebar: () => void
   syncUi: SyncUiState
   onOpenSync: () => void
+  onGoHome: () => void
   view: 'documents' | 'sync' | 'groups' | 'preview'
   searchDisabled?: boolean
 }
@@ -17,6 +18,7 @@ export function Topbar({
   onToggleSidebar,
   syncUi,
   onOpenSync,
+  onGoHome,
   view,
   searchDisabled,
 }: TopbarProps) {
@@ -37,10 +39,15 @@ export function Topbar({
           />
         </svg>
       </button>
-      <div className="wordmark">
+      <button
+        type="button"
+        className="wordmark"
+        onClick={onGoHome}
+        aria-label="Back to documents"
+      >
         <span className="prompt">~/</span>docket
         <span className="cursor">_</span>
-      </div>
+      </button>
       <div className="search">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
           <circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="1.8" />

@@ -89,7 +89,12 @@
     font-size:15px;
     color:var(--text);
     white-space:nowrap;
+    background:none;
+    border:none;
+    padding:0;
+    cursor:pointer;
   }
+  .wordmark:hover{ color:var(--accent); }
   .wordmark .prompt{color:var(--accent);}
   .wordmark .cursor{
     color:var(--accent);
@@ -178,6 +183,20 @@
     flex-direction:column;
     min-height:0;
   }
+  /* Sync / manage groups embedded beside the filter sidebar */
+  .body > .sync-page{
+    min-height:0;
+    height:100%;
+    overflow:auto;
+  }
+  .body > .groups-page{
+    min-height:0;
+    height:100%;
+    max-height:100%;
+    overflow:hidden;
+    display:flex;
+    flex-direction:column;
+  }
   .groups-page-inner{
     flex:1;
     min-height:0;
@@ -214,8 +233,9 @@
   }
   .groups-page .manage-groups-col{
     min-height:0;
-    overflow:hidden;
     height:100%;
+    /* don't clip input focus rings; lists scroll themselves */
+    overflow:visible;
   }
   .groups-page .manage-groups-list,
   .groups-page .manage-senders-list{
@@ -490,8 +510,8 @@
     min-height:0;
     flex:1;
     overflow:hidden;
-    /* keep focus rings inside the overflow clip */
-    padding-inline:4px;
+    /* room for focus rings around inputs above the lists */
+    padding:4px;
   }
   .manage-groups-modal input:focus-visible,
   .manage-groups-modal button:focus-visible{
@@ -501,6 +521,21 @@
   .manage-groups-modal .manage-filter-chip:focus-visible,
   .manage-groups-modal .manage-group-item:focus-visible,
   .manage-groups-modal .manage-text-btn:focus-visible{
+    outline:none;
+    box-shadow:inset 0 0 0 2px var(--focus);
+  }
+  .groups-page .edit-modal-input:focus,
+  .groups-page .edit-modal-input:focus-visible{
+    outline:none;
+    border-color:var(--focus);
+    box-shadow:inset 0 0 0 1px var(--focus);
+  }
+  .groups-page .manage-filter-chip:focus-visible,
+  .groups-page .manage-group-item:focus-visible,
+  .groups-page .manage-text-btn:focus-visible,
+  .groups-page .manage-order-btn:focus-visible,
+  .groups-page .manage-drag-handle:focus-visible,
+  .groups-page button:focus-visible{
     outline:none;
     box-shadow:inset 0 0 0 2px var(--focus);
   }

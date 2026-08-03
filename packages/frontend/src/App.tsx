@@ -167,6 +167,12 @@ export default function App() {
     setActiveDocId(null)
   }, [])
 
+  const showDocuments = useCallback(() => {
+    setView('documents')
+    setActiveDocId(null)
+    closeMobileSidebar()
+  }, [closeMobileSidebar])
+
   useEffect(() => {
     if (view === 'preview' && activeDocId && !previewDoc) {
       setView('documents')
@@ -176,10 +182,58 @@ export default function App() {
 
   const bodyClass =
     'body' +
-    (view === 'sync' || view === 'groups' || view === 'preview'
-      ? ' sync-view'
-      : '') +
+    (view === 'preview' ? ' sync-view' : '') +
     (showSidebar ? ' show-sidebar' : '')
+
+  const mainPane =
+    view === 'sync' ? (
+      <SyncPage
+        config={config}
+        syncing={syncUi.syncing}
+        paused={syncUi.paused}
+        progress={progress}
+        log={log}
+        onSync={(opts) => void sync(opts)}
+        onPause={() => void pause()}
+        onResume={() => void resume()}
+        onCancel={() => void cancel()}
+        onBack={onBackToDocuments}
+        onRefreshConfig={() => void refreshConfig()}
+      />
+    ) : view === 'groups' ? (
+      <GroupsPage
+        groups={groups}
+        allSenders={bySenderName(docs).map((s) => s.name)}
+        onBack={onBackToDocuments}
+        onCreate={createGroup}
+        onRename={(id, name) => updateGroup(id, { name })}
+        onDelete={removeGroup}
+        onSetMembers={setMembers}
+        onReorder={reorderGroups}
+      />
+    ) : (
+      <DocumentTable
+        list={list}
+        loading={loading}
+        error={error}
+        checked={checked}
+        previewId={activeDocId}
+        onToggleCheck={toggle}
+        onRowActivate={onRowActivate}
+        onSelectAll={(rows) => selectAll(rows)}
+        onRetry={() => void reload()}
+        onEditTags={(doc) => setEditTagsId(doc.id)}
+        onEditFilename={(doc) => setEditFilenameId(doc.id)}
+      >
+        <BulkBar
+          docs={docs}
+          checked={checked}
+          onClear={clear}
+          onRename={() => setBulkRenameOpen(true)}
+          onTag={() => setBulkTagsOpen(true)}
+        />
+      </DocumentTable>
+    )
 
   return (
     <>
@@ -232,47 +286,26 @@ export default function App() {
       <div className="app">
         <Topbar
           search={filters.search}
-          onSearchChange={setSearch}
+          onSearchChange={(value) => {
+            setSearch(value)
+            if (view === 'sync' || view === 'groups') showDocuments()
+          }}
           onToggleSidebar={() => setShowSidebar((v) => !v)}
           syncUi={syncUi}
           view={view}
-          searchDisabled={view !== 'documents'}
+          searchDisabled={view === 'preview'}
           onOpenSync={() => setView('sync')}
+          onGoHome={onBackToDocuments}
         />
         <div
           className={bodyClass}
           style={
-            view === 'documents'
+            view !== 'preview'
               ? ({ ['--sidebar-width' as string]: `${sidebarWidth}px` } as CSSProperties)
               : undefined
           }
         >
-          {view === 'sync' ? (
-            <SyncPage
-              config={config}
-              syncing={syncUi.syncing}
-              paused={syncUi.paused}
-              progress={progress}
-              log={log}
-              onSync={(opts) => void sync(opts)}
-              onPause={() => void pause()}
-              onResume={() => void resume()}
-              onCancel={() => void cancel()}
-              onBack={onBackToDocuments}
-              onRefreshConfig={() => void refreshConfig()}
-            />
-          ) : view === 'groups' ? (
-            <GroupsPage
-              groups={groups}
-              allSenders={bySenderName(docs).map((s) => s.name)}
-              onBack={onBackToDocuments}
-              onCreate={createGroup}
-              onRename={(id, name) => updateGroup(id, { name })}
-              onDelete={removeGroup}
-              onSetMembers={setMembers}
-              onReorder={reorderGroups}
-            />
-          ) : view === 'preview' && previewDoc ? (
+          {view === 'preview' && previewDoc ? (
             <PreviewPage
               doc={previewDoc}
               onBack={onBackToDocuments}
@@ -294,50 +327,43 @@ export default function App() {
                 onResizeStart={onSidebarResizeStart}
                 onToggleSender={(name) => {
                   toggleSender(name)
-                  closeMobileSidebar()
+                  showDocuments()
                 }}
                 onToggleGroup={(groupId) => {
                   toggleGroup(groupId)
-                  closeMobileSidebar()
+                  showDocuments()
                 }}
                 onToggleTag={(tag) => {
                   toggleTagFilter(tag)
+                  showDocuments()
                 }}
-                onSetTagFilters={setTagFilters}
-                onSetTagMode={setTagMode}
-                onSetDateFrom={setDateFrom}
-                onSetDateTo={setDateTo}
-                onClearFilters={clearFilters}
-                onManageGroups={() => {
-                  setShowSidebar(false)
-                  setView('groups')
+                onSetTagFilters={(tags) => {
+                  setTagFilters(tags)
+                  showDocuments()
                 }}
+                onSetTagMode={(mode) => {
+                  setTagMode(mode)
+                  showDocuments()
+                }}
+                onSetDateFrom={(value) => {
+                  setDateFrom(value)
+                  showDocuments()
+                }}
+                onSetDateTo={(value) => {
+                  setDateTo(value)
+                  showDocuments()
+                }}
+                onClearFilters={() => {
+                  clearFilters()
+                  showDocuments()
+                }}
+                onManageGroups={() => setView('groups')}
                 onUpdateGroup={updateGroup}
                 onMoveSender={moveSender}
                 onHideSender={hideSender}
                 onReorderGroups={reorderGroups}
               />
-              <DocumentTable
-                list={list}
-                loading={loading}
-                error={error}
-                checked={checked}
-                previewId={activeDocId}
-                onToggleCheck={toggle}
-                onRowActivate={onRowActivate}
-                onSelectAll={(rows) => selectAll(rows)}
-                onRetry={() => void reload()}
-                onEditTags={(doc) => setEditTagsId(doc.id)}
-                onEditFilename={(doc) => setEditFilenameId(doc.id)}
-              >
-                <BulkBar
-                  docs={docs}
-                  checked={checked}
-                  onClear={clear}
-                  onRename={() => setBulkRenameOpen(true)}
-                  onTag={() => setBulkTagsOpen(true)}
-                />
-              </DocumentTable>
+              {mainPane}
             </>
           )}
         </div>
