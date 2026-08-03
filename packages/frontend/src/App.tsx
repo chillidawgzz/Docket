@@ -180,10 +180,7 @@ export default function App() {
     }
   }, [view, activeDocId, previewDoc])
 
-  const bodyClass =
-    'body' +
-    (view === 'preview' ? ' sync-view' : '') +
-    (showSidebar ? ' show-sidebar' : '')
+  const bodyClass = 'body' + (showSidebar ? ' show-sidebar' : '')
 
   const mainPane =
     view === 'sync' ? (
@@ -210,6 +207,16 @@ export default function App() {
         onDelete={removeGroup}
         onSetMembers={setMembers}
         onReorder={reorderGroups}
+      />
+    ) : view === 'preview' && previewDoc ? (
+      <PreviewPage
+        doc={previewDoc}
+        onBack={onBackToDocuments}
+        onView={onView}
+        onRename={async (filename) => {
+          const updated = await patchDocument(previewDoc.id, { filename })
+          upsertDoc(updated)
+        }}
       />
     ) : (
       <DocumentTable
@@ -288,84 +295,68 @@ export default function App() {
           search={filters.search}
           onSearchChange={(value) => {
             setSearch(value)
-            if (view === 'sync' || view === 'groups') showDocuments()
+            if (view !== 'documents') showDocuments()
           }}
           onToggleSidebar={() => setShowSidebar((v) => !v)}
           syncUi={syncUi}
           view={view}
-          searchDisabled={view === 'preview'}
+          searchDisabled={false}
           onOpenSync={() => setView('sync')}
           onGoHome={onBackToDocuments}
         />
         <div
           className={bodyClass}
           style={
-            view !== 'preview'
-              ? ({ ['--sidebar-width' as string]: `${sidebarWidth}px` } as CSSProperties)
-              : undefined
+            { ['--sidebar-width' as string]: `${sidebarWidth}px` } as CSSProperties
           }
         >
-          {view === 'preview' && previewDoc ? (
-            <PreviewPage
-              doc={previewDoc}
-              onBack={onBackToDocuments}
-              onView={onView}
-              onRename={async (filename) => {
-                const updated = await patchDocument(previewDoc.id, { filename })
-                upsertDoc(updated)
-              }}
-            />
-          ) : (
-            <>
-              <Sidebar
-                docs={docs}
-                filters={filters}
-                anyFilter={anyFilter}
-                tagSuggestions={tagNames}
-                groups={groups}
-                hiddenSenders={hiddenSenders}
-                onResizeStart={onSidebarResizeStart}
-                onToggleSender={(name) => {
-                  toggleSender(name)
-                  showDocuments()
-                }}
-                onToggleGroup={(groupId) => {
-                  toggleGroup(groupId)
-                  showDocuments()
-                }}
-                onToggleTag={(tag) => {
-                  toggleTagFilter(tag)
-                  showDocuments()
-                }}
-                onSetTagFilters={(tags) => {
-                  setTagFilters(tags)
-                  showDocuments()
-                }}
-                onSetTagMode={(mode) => {
-                  setTagMode(mode)
-                  showDocuments()
-                }}
-                onSetDateFrom={(value) => {
-                  setDateFrom(value)
-                  showDocuments()
-                }}
-                onSetDateTo={(value) => {
-                  setDateTo(value)
-                  showDocuments()
-                }}
-                onClearFilters={() => {
-                  clearFilters()
-                  showDocuments()
-                }}
-                onManageGroups={() => setView('groups')}
-                onUpdateGroup={updateGroup}
-                onMoveSender={moveSender}
-                onHideSender={hideSender}
-                onReorderGroups={reorderGroups}
-              />
-              {mainPane}
-            </>
-          )}
+          <Sidebar
+            docs={docs}
+            filters={filters}
+            anyFilter={anyFilter}
+            tagSuggestions={tagNames}
+            groups={groups}
+            hiddenSenders={hiddenSenders}
+            onResizeStart={onSidebarResizeStart}
+            onToggleSender={(name) => {
+              toggleSender(name)
+              showDocuments()
+            }}
+            onToggleGroup={(groupId) => {
+              toggleGroup(groupId)
+              showDocuments()
+            }}
+            onToggleTag={(tag) => {
+              toggleTagFilter(tag)
+              showDocuments()
+            }}
+            onSetTagFilters={(tags) => {
+              setTagFilters(tags)
+              showDocuments()
+            }}
+            onSetTagMode={(mode) => {
+              setTagMode(mode)
+              showDocuments()
+            }}
+            onSetDateFrom={(value) => {
+              setDateFrom(value)
+              showDocuments()
+            }}
+            onSetDateTo={(value) => {
+              setDateTo(value)
+              showDocuments()
+            }}
+            onClearFilters={() => {
+              clearFilters()
+              showDocuments()
+            }}
+            onManageGroups={() => setView('groups')}
+            onUpdateGroup={updateGroup}
+            onMoveSender={moveSender}
+            onHideSender={hideSender}
+            onReorderGroups={reorderGroups}
+          />
+          {mainPane}
         </div>
       </div>
     </>
