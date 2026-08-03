@@ -6,7 +6,6 @@ import { DocumentTable } from './components/DocumentTable'
 import { Drawer } from './components/Drawer'
 import { EditFilenameModal } from './components/EditFilenameModal'
 import { EditTagsModal } from './components/EditTagsModal'
-import { PreviewPanel } from './components/PreviewPanel'
 import { Sidebar } from './components/Sidebar'
 import { SyncPage } from './components/SyncPage'
 import { Topbar } from './components/Topbar'
@@ -76,7 +75,6 @@ export default function App() {
   } = useSyncStatus(reload)
 
   const [view, setView] = useState<'documents' | 'sync'>('documents')
-  const [previewId, setPreviewId] = useState<string | null>(null)
   const [activeDocId, setActiveDocId] = useState<string | null>(null)
   const [viewDocId, setViewDocId] = useState<string | null>(null)
   const [editTagsId, setEditTagsId] = useState<string | null>(null)
@@ -120,9 +118,6 @@ export default function App() {
     [docs, filters, groups, hiddenSenders],
   )
 
-  const previewDoc = previewId
-    ? (docs.find((d) => d.id === previewId) ?? null)
-    : null
   const drawerDoc = activeDocId
     ? (docs.find((d) => d.id === activeDocId) ?? null)
     : null
@@ -141,7 +136,6 @@ export default function App() {
   }, [])
 
   const onRowActivate = useCallback((id: string) => {
-    setPreviewId((prev) => (prev === id ? null : id))
     setActiveDocId((prev) => (prev === id ? null : id))
   }, [])
 
@@ -152,7 +146,6 @@ export default function App() {
   const bodyClass =
     'body' +
     (view === 'sync' ? ' sync-view' : '') +
-    (previewId && view === 'documents' ? ' preview-open' : '') +
     (showSidebar ? ' show-sidebar' : '')
 
   return (
@@ -254,7 +247,7 @@ export default function App() {
                 loading={loading}
                 error={error}
                 checked={checked}
-                previewId={previewId}
+                previewId={activeDocId}
                 onToggleCheck={toggle}
                 onRowActivate={onRowActivate}
                 onSelectAll={(rows) => selectAll(rows)}
@@ -264,11 +257,6 @@ export default function App() {
               >
                 <BulkBar docs={docs} checked={checked} onClear={clear} />
               </DocumentTable>
-              <PreviewPanel
-                doc={previewDoc}
-                onClose={() => setPreviewId(null)}
-                onView={onView}
-              />
             </>
           )}
         </div>
