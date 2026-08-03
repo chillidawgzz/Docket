@@ -10,6 +10,7 @@ import type { Document } from '../api/types'
 import { formatShortDate, formatSize, monthKey, monthLabel } from '../lib/format'
 import { sortDocs, type SortDir, type SortKey } from '../lib/sort'
 import { tagColor } from '../lib/tagColor'
+import { LoadingInline, LoadingStatus } from './Spinner'
 
 function FileIcon() {
   return (
@@ -431,7 +432,7 @@ export function DocumentTable(props: DocumentTableProps) {
       <div className="table-toolbar">
         <div className="result-count">
           {loading ? (
-            'loading…'
+            <LoadingInline label="Loading…" />
           ) : error ? (
             'error'
           ) : showingLimited ? (
@@ -528,7 +529,11 @@ export function DocumentTable(props: DocumentTableProps) {
           {header('size', true)}
         </div>
         <div>
-          {loading && <div className="empty-state">loading documents…</div>}
+          {loading && (
+            <div className="empty-state">
+              <LoadingStatus label="Loading documents…" />
+            </div>
+          )}
           {error && (
             <div className="empty-state">
               couldn&apos;t load documents.{' '}

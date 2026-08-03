@@ -7,7 +7,6 @@ import {
   type SenderGroupInfo,
 } from '../lib/filters'
 import { tagColor } from '../lib/tagColor'
-import { ManageGroupsModal } from './ManageGroupsModal'
 import { TagPicker } from './TagPicker'
 
 const OTHER_COLLAPSED_KEY = 'docket.otherSendersCollapsed'
@@ -36,13 +35,11 @@ interface SidebarProps {
   onSetDateFrom: (value: string | null) => void
   onSetDateTo: (value: string | null) => void
   onClearFilters: () => void
-  onCreateGroup: (name: string) => Promise<void>
+  onManageGroups: () => void
   onUpdateGroup: (
     id: number,
     patch: { name?: string; collapsed?: boolean; hidden?: boolean },
   ) => Promise<void>
-  onDeleteGroup: (id: number) => Promise<void>
-  onSetGroupMembers: (id: number, senders: string[]) => Promise<void>
   onMoveSender: (sender: string, groupId: number | null) => Promise<void>
   onHideSender: (sender: string, hidden: boolean) => Promise<void>
   onReorderGroups: (ids: number[]) => Promise<void>
@@ -127,10 +124,8 @@ export function Sidebar({
   onSetDateFrom,
   onSetDateTo,
   onClearFilters,
-  onCreateGroup,
+  onManageGroups,
   onUpdateGroup,
-  onDeleteGroup,
-  onSetGroupMembers,
   onMoveSender,
   onHideSender,
   onReorderGroups,
@@ -138,7 +133,6 @@ export function Sidebar({
   const senders = bySenderName(docs)
   const tags = byTag(docs)
   const [menu, setMenu] = useState<MenuKey>(null)
-  const [manageOpen, setManageOpen] = useState(false)
   const [otherCollapsed, setOtherCollapsed] = useState(loadOtherCollapsed)
   const hiddenSet = useMemo(() => new Set(hiddenSenders), [hiddenSenders])
 
@@ -269,7 +263,7 @@ export function Sidebar({
             <button
               type="button"
               className="sidebar-manage-btn"
-              onClick={() => setManageOpen(true)}
+              onClick={onManageGroups}
             >
               Manage
             </button>
@@ -366,7 +360,7 @@ export function Sidebar({
                           type="button"
                           className="facet-menu-item"
                           onClick={() => {
-                            setManageOpen(true)
+                            onManageGroups()
                             closeMenu()
                           }}
                         >
@@ -535,17 +529,6 @@ export function Sidebar({
           e.preventDefault()
           onResizeStart(e.clientX)
         }}
-      />
-      <ManageGroupsModal
-        open={manageOpen}
-        groups={groups}
-        allSenders={senders.map((s) => s.name)}
-        onClose={() => setManageOpen(false)}
-        onCreate={onCreateGroup}
-        onRename={(id, name) => onUpdateGroup(id, { name })}
-        onDelete={onDeleteGroup}
-        onSetMembers={onSetGroupMembers}
-        onReorder={onReorderGroups}
       />
     </div>
   )

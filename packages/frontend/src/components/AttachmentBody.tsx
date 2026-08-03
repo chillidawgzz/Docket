@@ -1,14 +1,32 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import type { Document } from '../api/types'
 import { previewUrl } from '../api/client'
 import { type AttachmentPreviewState } from '../hooks/useAttachmentPreview'
 import { renderPdfFirstPage } from '../lib/pdfRender'
+import { LoadingStatus } from './Spinner'
 
 interface AttachmentBodyProps {
   doc: Document
   preview: AttachmentPreviewState
   /** compact = drawer thumbnail; full = modal entire file */
   variant: 'compact' | 'full'
+}
+
+type PdfStatus = 'idle' | 'rendering' | 'ok' | 'password' | 'error'
+
+function PreviewNotice({
+  title,
+  detail,
+}: {
+  title: string
+  detail?: string
+}) {
+  return (
+    <div className="preview-status preview-status--notice" role="status">
+      <span className="preview-status-title">{title}</span>
+      {detail && <span className="preview-status-text">{detail}</span>}
+    </div>
+  )
 }
 
 export function AttachmentBody({
@@ -19,38 +37,30 @@ export function AttachmentBody({
   const { mode, message, pdfData, textContent, ics, eml, sheetRows } = preview
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [mediaError, setMediaError] = useState(false)
+  const [pdfStatus, setPdfStatus] = useState<PdfStatus>('idle')
+  const [imageLoading, setImageLoading] = useState(true)
   const src = previewUrl(doc.id)
 
   useEffect(() => {
     setMediaError(false)
+    setPdfStatus('idle')
+    setImageLoading(true)
   }, [doc.id, mode])
 
   useEffect(() => {
     if (variant !== 'compact' || mode !== 'pdf' || !pdfData || !canvasRef.current)
       return
     let cancelled = false
+    setPdfStatus('rendering')
     void (async () => {
       const status = await renderPdfFirstPage(pdfData, canvasRef.current!)
       if (cancelled) return
-      if (status === 'password' || status === 'error') {
-        setMediaError(true)
-      }
+      setPdfStatus(status)
     })()
     return () => {
       cancelled = true
     }
   }, [variant, mode, pdfData])
-
-  const showMessage =
-    mode === 'loading' ||
-    mode === 'none' ||
-    mode === 'password' ||
-    mode === 'error' ||
-    mediaError
-
-  const statusText = mediaError
-    ? 'Could not display file'
-    : message
 
   const tall =
     mode === 'text' ||
@@ -59,16 +69,66 @@ export function AttachmentBody({
     mode === 'ics' ||
     mode === 'eml'
 
+  const encrypted =
+    mode === 'password' || (mode === 'pdf' && pdfStatus === 'password')
+
+  const failed =
+    mode === 'error' ||
+    mode === 'none' ||
+    mediaError ||
+    (mode === 'pdf' && pdfStatus === 'error')
+
+  const pdfBusy =
+    mode === 'pdf' &&
+    variant === 'compact' &&
+    !encrypted &&
+    !failed &&
+    (!pdfData || pdfStatus === 'rendering' || pdfStatus === 'idle')
+
+  let statusNode: ReactNode = null
+  if (encrypted) {
+    statusNode = (
+      <PreviewNotice
+        title="Encrypted file"
+        detail="This attachment is password-protected and can’t be previewed."
+      />
+    )
+  } else if (mode === 'loading' || pdfBusy || (mode === 'image' && imageLoading && !mediaError)) {
+    statusNode = (
+      <LoadingStatus label="Loading preview…" className="preview-status" />
+    )
+  } else if (failed) {
+    const title =
+      mode === 'none'
+        ? 'No preview available'
+        : mediaError && mode === 'image'
+          ? 'Couldn’t display image'
+          : 'Preview failed'
+    const detail =
+      mode === 'none'
+        ? undefined
+        : message && message !== 'Loading…'
+          ? message
+          : 'Something went wrong while loading this attachment.'
+    statusNode = <PreviewNotice title={title} detail={detail} />
+  }
+
+  const showContent =
+    !encrypted &&
+    !failed &&
+    mode !== 'loading' &&
+    !(mode === 'pdf' && variant === 'compact' && pdfStatus !== 'ok')
+
   if (variant === 'full') {
     return (
       <div className="view-modal-body">
-        {showMessage && mode !== 'image' && mode !== 'pdf' && mode !== 'audio' && mode !== 'video' && (
-          <div className="view-modal-message">{statusText}</div>
+        {(mode === 'loading' || (mode === 'image' && imageLoading && !mediaError)) && (
+          <LoadingStatus label="Loading preview…" className="preview-status" />
         )}
-        {mode === 'loading' && (
-          <div className="view-modal-message">Loading…</div>
-        )}
-        {mode === 'pdf' && !mediaError && (
+        {encrypted && statusNode}
+        {failed && !encrypted && mode !== 'image' && statusNode}
+        {mode === 'image' && mediaError && statusNode}
+        {mode === 'pdf' && !encrypted && !failed && (
           <iframe
             className="view-modal-frame"
             title={doc.filename}
@@ -80,13 +140,15 @@ export function AttachmentBody({
             src={src}
             className="view-modal-img"
             alt={doc.filename}
-            onError={() => setMediaError(true)}
+            style={imageLoading ? { display: 'none' } : undefined}
+            onLoad={() => setImageLoading(false)}
+            onError={() => {
+              setImageLoading(false)
+              setMediaError(true)
+            }}
           />
         )}
-        {mode === 'image' && mediaError && (
-          <div className="view-modal-message">Could not display image</div>
-        )}
-        {mode === 'audio' && (
+        {mode === 'audio' && !failed && (
           <audio
             className="view-modal-audio"
             controls
@@ -94,7 +156,7 @@ export function AttachmentBody({
             onError={() => setMediaError(true)}
           />
         )}
-        {mode === 'video' && (
+        {mode === 'video' && !failed && (
           <video
             className="view-modal-video"
             controls
@@ -102,7 +164,7 @@ export function AttachmentBody({
             onError={() => setMediaError(true)}
           />
         )}
-        {(mode === 'text' || mode === 'docx') && (
+        {(mode === 'text' || mode === 'docx') && !failed && (
           <pre className="view-modal-text">{textContent}</pre>
         )}
         {mode === 'ics' && ics && (
@@ -165,7 +227,7 @@ export function AttachmentBody({
             </pre>
           </div>
         )}
-        {mode === 'xlsx' && (
+        {mode === 'xlsx' && !failed && (
           <div className="drawer-preview-table-wrap view-modal-table">
             <table className="drawer-preview-table">
               <tbody>
@@ -180,9 +242,6 @@ export function AttachmentBody({
             </table>
           </div>
         )}
-        {(mode === 'none' || mode === 'error') && (
-          <div className="view-modal-message">{statusText}</div>
-        )}
       </div>
     )
   }
@@ -193,28 +252,31 @@ export function AttachmentBody({
         'drawer-preview-box' + (tall ? ' drawer-preview-box--tall' : '')
       }
     >
-      {mode === 'loading' && 'Loading…'}
-      {showMessage &&
-        mode !== 'loading' &&
-        mode !== 'image' &&
-        !(mode === 'pdf' && !!pdfData) &&
-        statusText}
-      {mode === 'pdf' && pdfData && !mediaError && (
-        <canvas ref={canvasRef} className="drawer-preview-canvas" />
+      {statusNode}
+      {mode === 'pdf' && pdfData && !encrypted && pdfStatus !== 'error' && (
+        <canvas
+          ref={canvasRef}
+          className={
+            'drawer-preview-canvas' +
+            (pdfStatus !== 'ok' ? ' drawer-preview-canvas--hidden' : '')
+          }
+          aria-hidden={pdfStatus !== 'ok'}
+        />
       )}
-      {mode === 'pdf' && !pdfData && (
-        <span className="drawer-preview-loading">Loading…</span>
-      )}
-      {mode === 'image' && !mediaError && (
+      {showContent && mode === 'image' && (
         <img
           src={src}
           className="drawer-preview-img"
           alt={doc.filename}
-          onError={() => setMediaError(true)}
+          style={imageLoading ? { display: 'none' } : undefined}
+          onLoad={() => setImageLoading(false)}
+          onError={() => {
+            setImageLoading(false)
+            setMediaError(true)
+          }}
         />
       )}
-      {mode === 'image' && mediaError && 'Could not display image'}
-      {mode === 'audio' && (
+      {showContent && mode === 'audio' && (
         <audio
           className="drawer-preview-audio"
           controls
@@ -222,7 +284,7 @@ export function AttachmentBody({
           onError={() => setMediaError(true)}
         />
       )}
-      {mode === 'video' && (
+      {showContent && mode === 'video' && (
         <video
           className="drawer-preview-video"
           controls
@@ -230,10 +292,10 @@ export function AttachmentBody({
           onError={() => setMediaError(true)}
         />
       )}
-      {(mode === 'text' || mode === 'docx') && (
+      {showContent && (mode === 'text' || mode === 'docx') && (
         <pre className="drawer-preview-text">{textContent}</pre>
       )}
-      {mode === 'ics' && ics && (
+      {showContent && mode === 'ics' && ics && (
         <div className="drawer-preview-card">
           <div className="drawer-card-title">{ics.summary}</div>
           {ics.start && (
@@ -267,7 +329,7 @@ export function AttachmentBody({
           )}
         </div>
       )}
-      {mode === 'eml' && eml && (
+      {showContent && mode === 'eml' && eml && (
         <div className="drawer-preview-card">
           <div className="drawer-card-title">{eml.subject}</div>
           {eml.from && (
@@ -293,7 +355,7 @@ export function AttachmentBody({
           </pre>
         </div>
       )}
-      {mode === 'xlsx' && (
+      {showContent && mode === 'xlsx' && (
         <div className="drawer-preview-table-wrap">
           <table className="drawer-preview-table">
             <tbody>

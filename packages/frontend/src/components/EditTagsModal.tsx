@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { Document } from '../api/types'
+import { Spinner } from './Spinner'
 import { TagPicker } from './TagPicker'
 
 interface EditTagsModalProps {
@@ -59,7 +60,7 @@ export function EditTagsModal({
           </button>
           <button
             type="button"
-            className="btn-download"
+            className="btn-download btn-with-spinner"
             disabled={saving}
             onClick={() => {
               setSaving(true)
@@ -70,7 +71,14 @@ export function EditTagsModal({
                 .finally(() => setSaving(false))
             }}
           >
-            {saving ? 'Saving…' : 'Save'}
+            {saving ? (
+              <>
+                <Spinner size="sm" />
+                Saving…
+              </>
+            ) : (
+              'Save'
+            )}
           </button>
         </div>
       </div>

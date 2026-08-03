@@ -1,4 +1,5 @@
 import type { SyncUiState } from '../hooks/useSyncStatus'
+import { Spinner } from './Spinner'
 
 interface TopbarProps {
   search: string
@@ -6,7 +7,7 @@ interface TopbarProps {
   onToggleSidebar: () => void
   syncUi: SyncUiState
   onOpenSync: () => void
-  view: 'documents' | 'sync'
+  view: 'documents' | 'sync' | 'groups' | 'preview'
   searchDisabled?: boolean
 }
 
@@ -52,7 +53,7 @@ export function Topbar({
         </svg>
         <input
           type="search"
-          placeholder="grep filename, sender, subject…"
+          placeholder="grep filename, sender, subject, message…"
           aria-label="Search documents"
           value={search}
           disabled={searchDisabled}
@@ -62,10 +63,19 @@ export function Topbar({
       <div className="topbar-right">
         <button
           type="button"
-          className={'topbar-sync-btn' + (view === 'sync' ? ' active' : '')}
+          className={
+            'topbar-sync-btn btn-with-spinner' + (view === 'sync' ? ' active' : '')
+          }
           onClick={onOpenSync}
         >
-          {syncUi.syncing ? 'Syncing…' : 'Sync'}
+          {syncUi.syncing ? (
+            <>
+              <Spinner size="sm" />
+              Syncing…
+            </>
+          ) : (
+            'Sync'
+          )}
         </button>
         <span>
           <span

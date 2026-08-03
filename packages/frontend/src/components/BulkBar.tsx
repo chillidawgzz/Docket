@@ -6,19 +6,38 @@ interface BulkBarProps {
   docs: Document[]
   checked: Set<string>
   onClear: () => void
+  onRename: () => void
+  onTag: () => void
 }
 
-export function BulkBar({ docs, checked, onClear }: BulkBarProps) {
+export function BulkBar({
+  docs,
+  checked,
+  onClear,
+  onRename,
+  onTag,
+}: BulkBarProps) {
   const checkedDocs = docs.filter((d) => checked.has(d.id))
   if (checkedDocs.length === 0) return null
 
   const totalBytes = checkedDocs.reduce((sum, d) => sum + d.size, 0)
+  const canBulk = checkedDocs.length >= 2
 
   return (
     <div className="bulk-bar">
       <span className="bulk-summary">
         <b>{checkedDocs.length}</b> selected · {formatSize(totalBytes)} total
       </span>
+      {canBulk && (
+        <>
+          <button type="button" className="btn-clear" onClick={onTag}>
+            Tags…
+          </button>
+          <button type="button" className="btn-clear" onClick={onRename}>
+            Rename…
+          </button>
+        </>
+      )}
       <button
         type="button"
         className="btn-download"

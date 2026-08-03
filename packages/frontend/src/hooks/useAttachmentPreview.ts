@@ -203,11 +203,11 @@ export function useAttachmentPreview(
         })
       } catch {
         if (!cancelled) {
-          setState({
-            ...empty,
-            mode: 'error',
-            message: 'Preview unavailable',
-          })
+        setState({
+          ...empty,
+          mode: 'error',
+          message: 'Couldn’t load this attachment.',
+        })
         }
       }
     })()

@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { SenderGroupInfo } from '../lib/filters'
+import { Spinner } from './Spinner'
 
-interface ManageGroupsModalProps {
-  open: boolean
+interface GroupsPageProps {
   groups: SenderGroupInfo[]
   allSenders: string[]
-  onClose: () => void
+  onBack: () => void
   onCreate: (name: string) => Promise<void>
   onRename: (id: number, name: string) => Promise<void>
   onDelete: (id: number) => Promise<void>
@@ -19,19 +19,6 @@ function sameMembers(a: string[], b: string[]) {
   if (a.length !== b.length) return false
   const set = new Set(a)
   return b.every((s) => set.has(s))
-}
-
-function CloseIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path
-        d="M6 6l12 12M18 6L6 18"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-      />
-    </svg>
-  )
 }
 
 function SearchIcon() {
@@ -72,17 +59,16 @@ function ChevronDownIcon() {
   )
 }
 
-export function ManageGroupsModal({
-  open,
+export function GroupsPage({
   groups,
   allSenders,
-  onClose,
+  onBack,
   onCreate,
   onRename,
   onDelete,
   onSetMembers,
   onReorder,
-}: ManageGroupsModalProps) {
+}: GroupsPageProps) {
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [newName, setNewName] = useState('')
   const [renameValue, setRenameValue] = useState('')
@@ -119,17 +105,16 @@ export function ManageGroupsModal({
     renameValue.trim() !== '' && renameValue.trim() !== savedName
   const dirty = Boolean(selected) && (membersDirty || renameDirty)
 
-  const requestClose = useCallback(() => {
+  const requestBack = useCallback(() => {
     if (busy) return
     if (dirty) {
       const ok = window.confirm('You have unsaved changes. Discard them?')
       if (!ok) return
     }
-    onClose()
-  }, [busy, dirty, onClose])
+    onBack()
+  }, [busy, dirty, onBack])
 
   useEffect(() => {
-    if (!open) return
     setError('')
     setStatus('')
     setNewName('')
@@ -138,10 +123,9 @@ export function ManageGroupsModal({
     setConfirmDelete(false)
     const t = window.setTimeout(() => createRef.current?.focus(), 40)
     return () => window.clearTimeout(t)
-  }, [open])
+  }, [])
 
   useEffect(() => {
-    if (!open) return
     if (pendingSelectName) {
       const created = groups.find(
         (g) => g.name.toLowerCase() === pendingSelectName.toLowerCase(),
@@ -160,7 +144,7 @@ export function ManageGroupsModal({
     if (selectedId == null || !groups.some((g) => g.id === selectedId)) {
       setSelectedId(groups[0].id)
     }
-  }, [open, groups, selectedId, pendingSelectName])
+  }, [groups, selectedId, pendingSelectName])
 
   useEffect(() => {
     if (!selected) {
@@ -183,16 +167,15 @@ export function ManageGroupsModal({
   }, [selected])
 
   useEffect(() => {
-    if (!open) return
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.preventDefault()
-        requestClose()
+        requestBack()
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [open, requestClose])
+  }, [requestBack])
 
   const run = async (fn: () => Promise<void>, okMessage?: string) => {
     setBusy(true)
@@ -285,41 +268,25 @@ export function ManageGroupsModal({
     })
   }
 
-  if (!open) return null
-
   return (
-    <div
-      className="view-modal-overlay"
-      onClick={requestClose}
-      role="presentation"
-    >
-      <div
-        className="edit-modal manage-groups-modal"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="manage-groups-title"
-        aria-describedby="manage-groups-desc"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="edit-modal-header manage-groups-header">
+    <main className="sync-page groups-page" aria-label="Manage sender groups">
+      <div className="sync-page-inner groups-page-inner">
+        <header className="sync-header">
+          <button type="button" className="sync-back" onClick={requestBack}>
+            ← Documents
+          </button>
           <div>
-            <h3 id="manage-groups-title">Manage groups</h3>
-            <p id="manage-groups-desc" className="edit-modal-sub manage-groups-lead">
+            <h1 className="sync-title" id="manage-groups-title">
+              Sender groups
+            </h1>
+            <p className="sync-subtitle" id="manage-groups-desc">
               Organize senders into groups. Drag to reorder. Each sender can only
               be in one group.
             </p>
           </div>
-          <button
-            type="button"
-            className="view-modal-close"
-            onClick={requestClose}
-            aria-label="Close"
-          >
-            <CloseIcon />
-          </button>
-        </div>
+        </header>
 
-        <div className="manage-groups-layout">
+        <div className="manage-groups-layout groups-page-layout">
           <section className="manage-groups-col" aria-label="Groups">
             <div className="manage-panel-head">
               <h4 className="manage-panel-title">Groups</h4>
@@ -663,19 +630,18 @@ export function ManageGroupsModal({
                   <div className="edit-modal-actions manage-footer-actions">
                     <button
                       type="button"
-                      className="btn-clear"
-                      disabled={busy}
-                      onClick={requestClose}
-                    >
-                      Close
-                    </button>
-                    <button
-                      type="button"
-                      className="btn-download"
+                      className="btn-download btn-with-spinner"
                       disabled={busy || !dirty}
                       onClick={saveAll}
                     >
-                      {busy ? 'Saving…' : 'Save changes'}
+                      {busy ? (
+                        <>
+                          <Spinner size="sm" />
+                          Saving…
+                        </>
+                      ) : (
+                        'Save changes'
+                      )}
                     </button>
                   </div>
                 </div>
@@ -698,6 +664,6 @@ export function ManageGroupsModal({
           {!error && status && <div className="manage-status-ok">{status}</div>}
         </div>
       </div>
-    </div>
+    </main>
   )
 }

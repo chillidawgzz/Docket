@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { SyncConfig, SyncLogEntry, SyncOptions } from '../api/types'
 import type { SyncProgress } from '../hooks/useSyncStatus'
+import { Spinner } from './Spinner'
 
 interface SyncPageProps {
   config: SyncConfig | null
@@ -219,7 +220,7 @@ export function SyncPage({
             <div className="sync-actions">
               <button
                 type="button"
-                className="sync-run"
+                className="sync-run btn-with-spinner"
                 disabled={syncing || !config?.configured}
                 onClick={() =>
                   onSync({
@@ -230,7 +231,18 @@ export function SyncPage({
                   })
                 }
               >
-                {syncing ? (paused ? 'Paused' : 'Syncing…') : 'Start sync'}
+                {syncing ? (
+                  paused ? (
+                    'Paused'
+                  ) : (
+                    <>
+                      <Spinner size="sm" />
+                      Syncing…
+                    </>
+                  )
+                ) : (
+                  'Start sync'
+                )}
               </button>
               {syncing && (
                 <>
@@ -262,7 +274,10 @@ export function SyncPage({
           </section>
 
           <section className="sync-panel sync-panel--live">
-            <h2 className="sync-panel-title">Live progress</h2>
+            <h2 className="sync-panel-title">
+              Live progress
+              {syncing && !paused && <Spinner size="sm" className="sync-live-spinner" />}
+            </h2>
 
             <div className="sync-progress-block">
               <div className="sync-progress-meta">

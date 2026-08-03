@@ -124,6 +124,12 @@ export function filteredDocs(
         ' ' +
         d.email.subject +
         ' ' +
+        d.email.from +
+        ' ' +
+        (d.email.snippet || '') +
+        ' ' +
+        (d.email.full || '') +
+        ' ' +
         d.tags.join(' ')
       ).toLowerCase()
       if (!hay.includes(q)) return false

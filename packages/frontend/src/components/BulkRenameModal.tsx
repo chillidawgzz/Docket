@@ -1,12 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Document } from '../api/types'
-import { expandFilenameTemplate } from '../lib/filenameTemplate'
+import {
+  expandFilenameTemplate,
+  uniquifyFilenames,
+} from '../lib/filenameTemplate'
 import { Spinner } from './Spinner'
 
-interface EditFilenameModalProps {
-  doc: Document | null
+interface BulkRenameModalProps {
+  docs: Document[]
   onClose: () => void
-  onSave: (filename: string) => Promise<void>
+  onSave: (renames: { id: string; filename: string }[]) => Promise<void>
 }
 
 const MACROS = [
@@ -15,44 +18,53 @@ const MACROS = [
   { token: '{dd}', label: 'Day' },
 ] as const
 
-export function EditFilenameModal({
-  doc,
+export function BulkRenameModal({
+  docs,
   onClose,
   onSave,
-}: EditFilenameModalProps) {
+}: BulkRenameModalProps) {
   const [value, setValue] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
-    setValue(doc?.filename || '')
+    if (!docs.length) return
+    setValue('')
     setError('')
-    if (!doc) return
-    const t = window.setTimeout(() => {
-      inputRef.current?.focus()
-      inputRef.current?.select()
-    }, 40)
+    const t = window.setTimeout(() => inputRef.current?.focus(), 40)
     return () => window.clearTimeout(t)
-  }, [doc])
+  }, [docs])
 
   useEffect(() => {
-    if (!doc) return
+    if (!docs.length) return
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [doc, onClose])
+  }, [docs, onClose])
 
-  const expanded = useMemo(() => {
-    if (!doc) return ''
+  const preview = useMemo(() => {
     const template = value.trim()
-    if (!template) return ''
-    return expandFilenameTemplate(template, doc.date, doc.filename)
-  }, [doc, value])
+    if (!template) return []
+    const expanded = docs.map((d) => ({
+      id: d.id,
+      from: d.filename,
+      filename: expandFilenameTemplate(template, d.date, d.filename),
+    }))
+    const unique = uniquifyFilenames(
+      expanded.map((e) => ({ id: e.id, filename: e.filename })),
+    )
+    const byId = new Map(unique.map((u) => [u.id, u.filename]))
+    return expanded.map((e) => ({
+      id: e.id,
+      from: e.from,
+      filename: byId.get(e.id) || e.filename,
+    }))
+  }, [docs, value])
 
-  if (!doc) return null
+  if (!docs.length) return null
 
   const insertMacro = (token: string) => {
     const el = inputRef.current
@@ -74,53 +86,56 @@ export function EditFilenameModal({
   const submit = () => {
     const template = value.trim()
     if (!template) {
-      setError('Name required')
+      setError('Enter a name pattern')
       inputRef.current?.focus()
       return
     }
-    const next = expandFilenameTemplate(template, doc.date, doc.filename)
+    if (!/\{yyyy\}|\{mm\}|\{dd\}/i.test(template)) {
+      // Allow static names too, but warn if all would collide hard — uniquify handles it
+    }
+    const renames = uniquifyFilenames(
+      docs.map((d) => ({
+        id: d.id,
+        filename: expandFilenameTemplate(template, d.date, d.filename),
+      })),
+    )
     setSaving(true)
     setError('')
-    void onSave(next)
+    void onSave(renames)
       .then(onClose)
-      .catch(() => setError('Could not save'))
+      .catch(() => setError('Could not rename some files'))
       .finally(() => setSaving(false))
   }
-
-  const showPreview =
-    expanded &&
-    (expanded !== value.trim() || /\{yyyy\}|\{mm\}|\{dd\}/i.test(value))
 
   return (
     <div className="view-modal-overlay" onClick={onClose} role="presentation">
       <div
-        className="edit-modal"
+        className="edit-modal bulk-rename-modal"
         role="dialog"
         aria-modal="true"
-        aria-label="Rename file"
+        aria-labelledby="bulk-rename-title"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="edit-modal-header">
-          <h3>Rename file</h3>
+          <h3 id="bulk-rename-title">Rename {docs.length} files</h3>
           <button type="button" className="view-modal-close" onClick={onClose}>
             ✕
           </button>
         </div>
         <p className="edit-modal-sub">
-          Date macros expand from this file&apos;s date. Example:{' '}
-          <code className="bulk-rename-code">
-            Invoice - {'{yyyy}'}-{'{mm}'}-{'{dd}'}
-          </code>
+          Use date macros that expand per file. Example:{' '}
+          <code className="bulk-rename-code">Cavalry Mews - {'{yyyy}'}-{'{mm}'}-{'{dd}'}</code>
         </p>
 
-        <label className="bulk-rename-label" htmlFor="edit-filename-pattern">
-          Name
+        <label className="bulk-rename-label" htmlFor="bulk-rename-pattern">
+          Name pattern
         </label>
         <input
-          id="edit-filename-pattern"
+          id="bulk-rename-pattern"
           ref={inputRef}
           className="edit-modal-input"
           value={value}
+          placeholder="Name - {yyyy}-{mm}-{dd}"
           onChange={(e) => {
             setValue(e.target.value)
             setError('')
@@ -147,15 +162,28 @@ export function EditFilenameModal({
           ))}
         </div>
 
-        {showPreview && (
+        {preview.length > 0 && (
           <div className="bulk-rename-preview">
-            <div className="bulk-rename-preview-label">Result</div>
+            <div className="bulk-rename-preview-label">Preview</div>
             <ul className="bulk-rename-preview-list">
-              <li>
-                <span className="bulk-rename-to" title={expanded}>
-                  {expanded}
-                </span>
-              </li>
+              {preview.slice(0, 8).map((p) => (
+                <li key={p.id}>
+                  <span className="bulk-rename-from" title={p.from}>
+                    {p.from}
+                  </span>
+                  <span className="bulk-rename-arrow" aria-hidden="true">
+                    →
+                  </span>
+                  <span className="bulk-rename-to" title={p.filename}>
+                    {p.filename}
+                  </span>
+                </li>
+              ))}
+              {preview.length > 8 && (
+                <li className="bulk-rename-more">
+                  +{preview.length - 8} more
+                </li>
+              )}
             </ul>
           </div>
         )}
@@ -174,10 +202,10 @@ export function EditFilenameModal({
             {saving ? (
               <>
                 <Spinner size="sm" />
-                Saving…
+                Renaming…
               </>
             ) : (
-              'Save'
+              `Rename ${docs.length}`
             )}
           </button>
         </div>

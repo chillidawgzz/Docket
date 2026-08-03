@@ -2,10 +2,16 @@ import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'r
 import { patchDocument } from './api/client'
 import type { Document } from './api/types'
 import { BulkBar } from './components/BulkBar'
+import { BulkRenameModal } from './components/BulkRenameModal'
+import {
+  applyBulkTags,
+  BulkTagsModal,
+} from './components/BulkTagsModal'
 import { DocumentTable } from './components/DocumentTable'
-import { Drawer } from './components/Drawer'
 import { EditFilenameModal } from './components/EditFilenameModal'
 import { EditTagsModal } from './components/EditTagsModal'
+import { GroupsPage } from './components/GroupsPage'
+import { PreviewPage } from './components/PreviewPage'
 import { Sidebar } from './components/Sidebar'
 import { SyncPage } from './components/SyncPage'
 import { Topbar } from './components/Topbar'
@@ -16,7 +22,7 @@ import { useSelection } from './hooks/useSelection'
 import { useSenderGroups } from './hooks/useSenderGroups'
 import { useSyncStatus } from './hooks/useSyncStatus'
 import { useTags } from './hooks/useTags'
-import { filteredDocs } from './lib/filters'
+import { bySenderName, filteredDocs } from './lib/filters'
 import './styles/app.css'
 
 const SIDEBAR_WIDTH_KEY = 'docket.sidebarWidth'
@@ -33,6 +39,8 @@ function loadSidebarWidth() {
   }
   return SIDEBAR_DEFAULT
 }
+
+type AppView = 'documents' | 'sync' | 'groups' | 'preview'
 
 export default function App() {
   const { docs, loading, error, reload, upsertDoc } = useDocuments()
@@ -74,11 +82,13 @@ export default function App() {
     refreshConfig,
   } = useSyncStatus(reload)
 
-  const [view, setView] = useState<'documents' | 'sync'>('documents')
+  const [view, setView] = useState<AppView>('documents')
   const [activeDocId, setActiveDocId] = useState<string | null>(null)
   const [viewDocId, setViewDocId] = useState<string | null>(null)
   const [editTagsId, setEditTagsId] = useState<string | null>(null)
   const [editFilenameId, setEditFilenameId] = useState<string | null>(null)
+  const [bulkRenameOpen, setBulkRenameOpen] = useState(false)
+  const [bulkTagsOpen, setBulkTagsOpen] = useState(false)
   const [showSidebar, setShowSidebar] = useState(false)
   const [sidebarWidth, setSidebarWidth] = useState(loadSidebarWidth)
 
@@ -118,7 +128,7 @@ export default function App() {
     [docs, filters, groups, hiddenSenders],
   )
 
-  const drawerDoc = activeDocId
+  const previewDoc = activeDocId
     ? (docs.find((d) => d.id === activeDocId) ?? null)
     : null
   const viewDoc = viewDocId
@@ -130,31 +140,49 @@ export default function App() {
   const editFilenameDoc = editFilenameId
     ? (docs.find((d) => d.id === editFilenameId) ?? null)
     : null
+  const bulkRenameDocs = useMemo(
+    () => (bulkRenameOpen ? docs.filter((d) => checked.has(d.id)) : []),
+    [bulkRenameOpen, docs, checked],
+  )
+  const bulkTagDocs = useMemo(
+    () => (bulkTagsOpen ? docs.filter((d) => checked.has(d.id)) : []),
+    [bulkTagsOpen, docs, checked],
+  )
 
   const closeMobileSidebar = useCallback(() => {
     if (window.innerWidth <= 900) setShowSidebar(false)
   }, [])
 
   const onRowActivate = useCallback((id: string) => {
-    setActiveDocId((prev) => (prev === id ? null : id))
+    setActiveDocId(id)
+    setView('preview')
   }, [])
 
   const onView = useCallback((doc: Document) => {
     setViewDocId(doc.id)
   }, [])
 
+  const onBackToDocuments = useCallback(() => {
+    setView('documents')
+    setActiveDocId(null)
+  }, [])
+
+  useEffect(() => {
+    if (view === 'preview' && activeDocId && !previewDoc) {
+      setView('documents')
+      setActiveDocId(null)
+    }
+  }, [view, activeDocId, previewDoc])
+
   const bodyClass =
     'body' +
-    (view === 'sync' ? ' sync-view' : '') +
+    (view === 'sync' || view === 'groups' || view === 'preview'
+      ? ' sync-view'
+      : '') +
     (showSidebar ? ' show-sidebar' : '')
 
   return (
     <>
-      <Drawer
-        doc={drawerDoc}
-        onClose={() => setActiveDocId(null)}
-        onView={onView}
-      />
       <ViewModal doc={viewDoc} onClose={() => setViewDocId(null)} />
       <EditTagsModal
         doc={editTagsDoc}
@@ -176,6 +204,31 @@ export default function App() {
           upsertDoc(updated)
         }}
       />
+      <BulkRenameModal
+        docs={bulkRenameDocs}
+        onClose={() => setBulkRenameOpen(false)}
+        onSave={async (renames) => {
+          for (const { id, filename } of renames) {
+            const updated = await patchDocument(id, { filename })
+            upsertDoc(updated)
+          }
+          clear()
+        }}
+      />
+      <BulkTagsModal
+        docs={bulkTagDocs}
+        suggestions={tagNames}
+        onClose={() => setBulkTagsOpen(false)}
+        onSave={async (tags, mode) => {
+          for (const doc of bulkTagDocs) {
+            const next = applyBulkTags(doc.tags, tags, mode)
+            const updated = await patchDocument(doc.id, { tags: next })
+            upsertDoc(updated)
+          }
+          await reloadTags()
+          clear()
+        }}
+      />
       <div className="app">
         <Topbar
           search={filters.search}
@@ -183,7 +236,7 @@ export default function App() {
           onToggleSidebar={() => setShowSidebar((v) => !v)}
           syncUi={syncUi}
           view={view}
-          searchDisabled={view === 'sync'}
+          searchDisabled={view !== 'documents'}
           onOpenSync={() => setView('sync')}
         />
         <div
@@ -205,8 +258,29 @@ export default function App() {
               onPause={() => void pause()}
               onResume={() => void resume()}
               onCancel={() => void cancel()}
-              onBack={() => setView('documents')}
+              onBack={onBackToDocuments}
               onRefreshConfig={() => void refreshConfig()}
+            />
+          ) : view === 'groups' ? (
+            <GroupsPage
+              groups={groups}
+              allSenders={bySenderName(docs).map((s) => s.name)}
+              onBack={onBackToDocuments}
+              onCreate={createGroup}
+              onRename={(id, name) => updateGroup(id, { name })}
+              onDelete={removeGroup}
+              onSetMembers={setMembers}
+              onReorder={reorderGroups}
+            />
+          ) : view === 'preview' && previewDoc ? (
+            <PreviewPage
+              doc={previewDoc}
+              onBack={onBackToDocuments}
+              onView={onView}
+              onRename={async (filename) => {
+                const updated = await patchDocument(previewDoc.id, { filename })
+                upsertDoc(updated)
+              }}
             />
           ) : (
             <>
@@ -234,10 +308,11 @@ export default function App() {
                 onSetDateFrom={setDateFrom}
                 onSetDateTo={setDateTo}
                 onClearFilters={clearFilters}
-                onCreateGroup={createGroup}
+                onManageGroups={() => {
+                  setShowSidebar(false)
+                  setView('groups')
+                }}
                 onUpdateGroup={updateGroup}
-                onDeleteGroup={removeGroup}
-                onSetGroupMembers={setMembers}
                 onMoveSender={moveSender}
                 onHideSender={hideSender}
                 onReorderGroups={reorderGroups}
@@ -255,7 +330,13 @@ export default function App() {
                 onEditTags={(doc) => setEditTagsId(doc.id)}
                 onEditFilename={(doc) => setEditFilenameId(doc.id)}
               >
-                <BulkBar docs={docs} checked={checked} onClear={clear} />
+                <BulkBar
+                  docs={docs}
+                  checked={checked}
+                  onClear={clear}
+                  onRename={() => setBulkRenameOpen(true)}
+                  onTag={() => setBulkTagsOpen(true)}
+                />
               </DocumentTable>
             </>
           )}
