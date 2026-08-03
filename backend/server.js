@@ -66,6 +66,14 @@ app.post('/api/sender-groups', (req, res) => {
   }
 });
 
+app.put('/api/sender-groups/reorder', (req, res) => {
+  try {
+    res.json(db.reorderSenderGroups(req.body?.ids || []));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.patch('/api/sender-groups/:id', (req, res) => {
   try {
     const id = Number(req.params.id);

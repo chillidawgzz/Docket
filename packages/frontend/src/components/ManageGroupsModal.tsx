@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { SenderGroupInfo } from '../lib/filters'
 
 interface ManageGroupsModalProps {
@@ -10,6 +10,66 @@ interface ManageGroupsModalProps {
   onRename: (id: number, name: string) => Promise<void>
   onDelete: (id: number) => Promise<void>
   onSetMembers: (id: number, senders: string[]) => Promise<void>
+  onReorder: (ids: number[]) => Promise<void>
+}
+
+type SenderFilter = 'all' | 'in' | 'out'
+
+function sameMembers(a: string[], b: string[]) {
+  if (a.length !== b.length) return false
+  const set = new Set(a)
+  return b.every((s) => set.has(s))
+}
+
+function CloseIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M6 6l12 12M18 6L6 18"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+      />
+    </svg>
+  )
+}
+
+function SearchIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="2" />
+      <path d="M20 20l-3.5-3.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+function GripIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true">
+      <circle cx="4" cy="3" r="1" />
+      <circle cx="8" cy="3" r="1" />
+      <circle cx="4" cy="6" r="1" />
+      <circle cx="8" cy="6" r="1" />
+      <circle cx="4" cy="9" r="1" />
+      <circle cx="8" cy="9" r="1" />
+    </svg>
+  )
+}
+
+function ChevronUpIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M6 14l6-6 6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+function ChevronDownIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M6 10l6 6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
 }
 
 export function ManageGroupsModal({
@@ -21,13 +81,25 @@ export function ManageGroupsModal({
   onRename,
   onDelete,
   onSetMembers,
+  onReorder,
 }: ManageGroupsModalProps) {
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [newName, setNewName] = useState('')
   const [renameValue, setRenameValue] = useState('')
   const [selectedSenders, setSelectedSenders] = useState<string[]>([])
+  const [savedSenders, setSavedSenders] = useState<string[]>([])
+  const [savedName, setSavedName] = useState('')
+  const [senderQuery, setSenderQuery] = useState('')
+  const [senderFilter, setSenderFilter] = useState<SenderFilter>('all')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [status, setStatus] = useState('')
+  const [pendingSelectName, setPendingSelectName] = useState<string | null>(null)
+  const [dragId, setDragId] = useState<number | null>(null)
+  const [dropTargetId, setDropTargetId] = useState<number | null>(null)
+  const createRef = useRef<HTMLInputElement>(null)
+  const draftGroupId = useRef<number | null>(null)
 
   const selected = useMemo(
     () => groups.find((g) => g.id === selectedId) || null,
@@ -42,160 +114,462 @@ export function ManageGroupsModal({
     return map
   }, [groups])
 
+  const membersDirty = !sameMembers(selectedSenders, savedSenders)
+  const renameDirty =
+    renameValue.trim() !== '' && renameValue.trim() !== savedName
+  const dirty = Boolean(selected) && (membersDirty || renameDirty)
+
+  const requestClose = useCallback(() => {
+    if (busy) return
+    if (dirty) {
+      const ok = window.confirm('You have unsaved changes. Discard them?')
+      if (!ok) return
+    }
+    onClose()
+  }, [busy, dirty, onClose])
+
   useEffect(() => {
     if (!open) return
     setError('')
+    setStatus('')
     setNewName('')
-    if (groups.length && (selectedId == null || !groups.some((g) => g.id === selectedId))) {
+    setSenderQuery('')
+    setSenderFilter('all')
+    setConfirmDelete(false)
+    const t = window.setTimeout(() => createRef.current?.focus(), 40)
+    return () => window.clearTimeout(t)
+  }, [open])
+
+  useEffect(() => {
+    if (!open) return
+    if (pendingSelectName) {
+      const created = groups.find(
+        (g) => g.name.toLowerCase() === pendingSelectName.toLowerCase(),
+      )
+      if (created) {
+        draftGroupId.current = null
+        setSelectedId(created.id)
+        setPendingSelectName(null)
+        return
+      }
+    }
+    if (!groups.length) {
+      setSelectedId(null)
+      return
+    }
+    if (selectedId == null || !groups.some((g) => g.id === selectedId)) {
       setSelectedId(groups[0].id)
     }
-  }, [open, groups, selectedId])
+  }, [open, groups, selectedId, pendingSelectName])
 
   useEffect(() => {
     if (!selected) {
+      draftGroupId.current = null
       setRenameValue('')
+      setSavedName('')
       setSelectedSenders([])
+      setSavedSenders([])
+      setConfirmDelete(false)
       return
     }
+    if (draftGroupId.current === selected.id) return
+    draftGroupId.current = selected.id
     setRenameValue(selected.name)
+    setSavedName(selected.name)
     setSelectedSenders([...selected.senders])
+    setSavedSenders([...selected.senders])
+    setConfirmDelete(false)
+    setError('')
   }, [selected])
 
   useEffect(() => {
     if (!open) return
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        requestClose()
+      }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [open, onClose])
+  }, [open, requestClose])
 
-  if (!open) return null
-
-  const run = async (fn: () => Promise<void>) => {
+  const run = async (fn: () => Promise<void>, okMessage?: string) => {
     setBusy(true)
     setError('')
+    setStatus('')
     try {
       await fn()
+      if (okMessage) setStatus(okMessage)
     } catch {
-      setError('Could not save changes')
+      setError('Could not save changes. Check the name and try again.')
     } finally {
       setBusy(false)
     }
+  }
+
+  const moveGroup = (fromIndex: number, toIndex: number) => {
+    if (
+      fromIndex === toIndex ||
+      fromIndex < 0 ||
+      toIndex < 0 ||
+      fromIndex >= groups.length ||
+      toIndex >= groups.length
+    ) {
+      return
+    }
+    const ids = groups.map((g) => g.id)
+    const [id] = ids.splice(fromIndex, 1)
+    ids.splice(toIndex, 0, id)
+    void run(async () => {
+      await onReorder(ids)
+    })
+  }
+
+  const selectGroup = (id: number) => {
+    if (id === selectedId) return
+    if (dirty) {
+      const ok = window.confirm('You have unsaved changes. Discard them?')
+      if (!ok) return
+    }
+    draftGroupId.current = null
+    setSelectedId(id)
   }
 
   const toggleSender = (name: string) => {
     setSelectedSenders((prev) =>
       prev.includes(name) ? prev.filter((s) => s !== name) : [...prev, name],
     )
+    setStatus('')
   }
 
+  const filteredSenders = allSenders.filter((name) => {
+    const q = senderQuery.trim().toLowerCase()
+    if (q && !name.toLowerCase().includes(q)) return false
+    const inSelected = selectedSenders.includes(name)
+    if (senderFilter === 'in') return inSelected
+    if (senderFilter === 'out') return !inSelected
+    return true
+  })
+
+  const createGroup = () => {
+    const name = newName.trim()
+    if (!name) {
+      setError('Enter a group name to create one.')
+      createRef.current?.focus()
+      return
+    }
+    void run(async () => {
+      await onCreate(name)
+      setNewName('')
+      setPendingSelectName(name)
+      setStatus(`Created “${name}”`)
+    })
+  }
+
+  const saveAll = () => {
+    if (!selected) return
+    const nextName = renameValue.trim()
+    if (!nextName) {
+      setError('Group name can’t be empty.')
+      return
+    }
+    void run(async () => {
+      if (renameDirty) await onRename(selected.id, nextName)
+      if (membersDirty || renameDirty) {
+        await onSetMembers(selected.id, selectedSenders)
+      }
+      setSavedSenders([...selectedSenders])
+      setSavedName(nextName)
+      setStatus('Group saved')
+    })
+  }
+
+  if (!open) return null
+
   return (
-    <div className="view-modal-overlay" onClick={onClose} role="presentation">
+    <div
+      className="view-modal-overlay"
+      onClick={requestClose}
+      role="presentation"
+    >
       <div
         className="edit-modal manage-groups-modal"
         role="dialog"
         aria-modal="true"
-        aria-label="Manage sender groups"
+        aria-labelledby="manage-groups-title"
+        aria-describedby="manage-groups-desc"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="edit-modal-header">
-          <h3>Manage groups</h3>
-          <button type="button" className="view-modal-close" onClick={onClose}>
-            ✕
+        <div className="edit-modal-header manage-groups-header">
+          <div>
+            <h3 id="manage-groups-title">Manage groups</h3>
+            <p id="manage-groups-desc" className="edit-modal-sub manage-groups-lead">
+              Organize senders into groups. Drag to reorder. Each sender can only
+              be in one group.
+            </p>
+          </div>
+          <button
+            type="button"
+            className="view-modal-close"
+            onClick={requestClose}
+            aria-label="Close"
+          >
+            <CloseIcon />
           </button>
         </div>
-        <p className="edit-modal-sub">
-          Create groups and assign senders. A sender can belong to one group.
-        </p>
 
         <div className="manage-groups-layout">
-          <div className="manage-groups-col">
-            <div className="manage-groups-create">
-              <input
-                className="edit-modal-input"
-                value={newName}
-                placeholder="New group name"
-                onChange={(e) => setNewName(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && newName.trim()) {
-                    void run(async () => {
-                      await onCreate(newName.trim())
-                      setNewName('')
-                    })
-                  }
-                }}
-              />
-              <button
-                type="button"
-                className="btn-download"
-                disabled={busy || !newName.trim()}
-                onClick={() =>
-                  void run(async () => {
-                    await onCreate(newName.trim())
-                    setNewName('')
-                  })
-                }
-              >
-                Add
-              </button>
+          <section className="manage-groups-col" aria-label="Groups">
+            <div className="manage-panel-head">
+              <h4 className="manage-panel-title">Groups</h4>
+              <span className="manage-panel-meta">{groups.length}</span>
             </div>
-            <div className="manage-groups-list">
-              {groups.map((g) => (
+
+            <div className="manage-field">
+              <label className="manage-field-label" htmlFor="manage-group-create">
+                New group
+              </label>
+              <div className="manage-groups-create">
+                <input
+                  id="manage-group-create"
+                  ref={createRef}
+                  className="edit-modal-input"
+                  value={newName}
+                  placeholder="e.g. Banks, Utilities"
+                  disabled={busy}
+                  onChange={(e) => {
+                    setNewName(e.target.value)
+                    setError('')
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault()
+                      createGroup()
+                    }
+                  }}
+                />
                 <button
-                  key={g.id}
                   type="button"
-                  className={
-                    'manage-group-item' + (selectedId === g.id ? ' active' : '')
-                  }
-                  onClick={() => setSelectedId(g.id)}
+                  className="btn-download"
+                  disabled={busy || !newName.trim()}
+                  onClick={createGroup}
                 >
-                  <span>{g.name}</span>
-                  <span className="facet-count">{g.senders.length}</span>
+                  Add
                 </button>
-              ))}
+              </div>
+            </div>
+
+            <div className="manage-groups-list" role="listbox" aria-label="Saved groups">
+              {groups.map((g, index) => {
+                const active = selectedId === g.id
+                return (
+                  <div
+                    key={g.id}
+                    role="option"
+                    aria-selected={active}
+                    className={
+                      'manage-group-item' +
+                      (active ? ' active' : '') +
+                      (dragId === g.id ? ' dragging' : '') +
+                      (dropTargetId === g.id ? ' drop-target' : '')
+                    }
+                    draggable={!busy}
+                    onDragStart={(e) => {
+                      setDragId(g.id)
+                      e.dataTransfer.effectAllowed = 'move'
+                      e.dataTransfer.setData('text/plain', String(g.id))
+                    }}
+                    onDragEnd={() => {
+                      setDragId(null)
+                      setDropTargetId(null)
+                    }}
+                    onDragOver={(e) => {
+                      e.preventDefault()
+                      e.dataTransfer.dropEffect = 'move'
+                      if (dropTargetId !== g.id) setDropTargetId(g.id)
+                    }}
+                    onDragLeave={() => {
+                      if (dropTargetId === g.id) setDropTargetId(null)
+                    }}
+                    onDrop={(e) => {
+                      e.preventDefault()
+                      const fromId = Number(
+                        e.dataTransfer.getData('text/plain') || dragId,
+                      )
+                      setDragId(null)
+                      setDropTargetId(null)
+                      const fromIndex = groups.findIndex((x) => x.id === fromId)
+                      const toIndex = groups.findIndex((x) => x.id === g.id)
+                      if (fromIndex >= 0 && toIndex >= 0) {
+                        moveGroup(fromIndex, toIndex)
+                      }
+                    }}
+                  >
+                    <span
+                      className="manage-drag-handle"
+                      title="Drag to reorder"
+                      aria-hidden="true"
+                    >
+                      <GripIcon />
+                    </span>
+                    <button
+                      type="button"
+                      className="manage-group-select"
+                      onClick={() => selectGroup(g.id)}
+                    >
+                      <span className="manage-group-name">{g.name}</span>
+                      <span className="facet-count" title="Members">
+                        {g.senders.length}
+                      </span>
+                    </button>
+                    <div className="manage-order-btns">
+                      <button
+                        type="button"
+                        className="manage-order-btn"
+                        aria-label={`Move ${g.name} up`}
+                        disabled={busy || index === 0}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          moveGroup(index, index - 1)
+                        }}
+                      >
+                        <ChevronUpIcon />
+                      </button>
+                      <button
+                        type="button"
+                        className="manage-order-btn"
+                        aria-label={`Move ${g.name} down`}
+                        disabled={busy || index === groups.length - 1}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          moveGroup(index, index + 1)
+                        }}
+                      >
+                        <ChevronDownIcon />
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
               {groups.length === 0 && (
-                <div className="sidebar-empty">No groups yet</div>
+                <div className="manage-empty">
+                  <p>No groups yet</p>
+                  <span>Create one above to start assigning senders.</span>
+                </div>
               )}
             </div>
-          </div>
+          </section>
 
-          <div className="manage-groups-col">
+          <section className="manage-groups-col" aria-label="Group details">
             {selected ? (
               <>
-                <div className="manage-groups-rename">
+                <div className="manage-panel-head">
+                  <h4 className="manage-panel-title">Members</h4>
+                  <span className="manage-panel-meta">
+                    {selectedSenders.length} selected
+                    {dirty ? ' · unsaved' : ''}
+                  </span>
+                </div>
+
+                <div className="manage-field">
+                  <label className="manage-field-label" htmlFor="manage-group-name">
+                    Group name
+                  </label>
                   <input
+                    id="manage-group-name"
                     className="edit-modal-input"
                     value={renameValue}
-                    onChange={(e) => setRenameValue(e.target.value)}
-                    aria-label="Rename group"
-                  />
-                  <button
-                    type="button"
-                    className="btn-clear"
-                    disabled={busy || !renameValue.trim() || renameValue === selected.name}
-                    onClick={() =>
-                      void run(() => onRename(selected.id, renameValue.trim()))
-                    }
-                  >
-                    Rename
-                  </button>
-                  <button
-                    type="button"
-                    className="btn-clear"
                     disabled={busy}
-                    onClick={() =>
-                      void run(async () => {
-                        await onDelete(selected.id)
-                        setSelectedId(null)
-                      })
-                    }
-                  >
-                    Delete
-                  </button>
+                    onChange={(e) => {
+                      setRenameValue(e.target.value)
+                      setStatus('')
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault()
+                        saveAll()
+                      }
+                    }}
+                  />
                 </div>
-                <div className="manage-senders-list">
-                  {allSenders.map((name) => {
+
+                <div className="manage-field">
+                  <label className="manage-field-label" htmlFor="manage-sender-search">
+                    Find senders
+                  </label>
+                  <div className="manage-search">
+                    <span className="manage-search-icon">
+                      <SearchIcon />
+                    </span>
+                    <input
+                      id="manage-sender-search"
+                      className="edit-modal-input manage-search-input"
+                      value={senderQuery}
+                      placeholder="Search by name"
+                      disabled={busy}
+                      onChange={(e) => setSenderQuery(e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                <div
+                  className="manage-filter-row"
+                  role="group"
+                  aria-label="Filter senders"
+                >
+                  {(
+                    [
+                      ['all', 'All'],
+                      ['in', 'In group'],
+                      ['out', 'Available'],
+                    ] as const
+                  ).map(([key, label]) => (
+                    <button
+                      key={key}
+                      type="button"
+                      className={
+                        'manage-filter-chip' +
+                        (senderFilter === key ? ' active' : '')
+                      }
+                      aria-pressed={senderFilter === key}
+                      onClick={() => setSenderFilter(key)}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                  <div className="manage-filter-actions">
+                    <button
+                      type="button"
+                      className="manage-text-btn"
+                      disabled={busy || filteredSenders.length === 0}
+                      onClick={() => {
+                        setSelectedSenders((prev) => {
+                          const next = new Set(prev)
+                          for (const s of filteredSenders) next.add(s)
+                          return [...next]
+                        })
+                        setStatus('')
+                      }}
+                    >
+                      Select shown
+                    </button>
+                    <button
+                      type="button"
+                      className="manage-text-btn"
+                      disabled={busy || selectedSenders.length === 0}
+                      onClick={() => {
+                        setSelectedSenders([])
+                        setStatus('')
+                      }}
+                    >
+                      Clear
+                    </button>
+                  </div>
+                </div>
+
+                <div className="manage-senders-list" role="group" aria-label="Senders">
+                  {filteredSenders.map((name) => {
                     const otherGroupId = grouped.get(name)
                     const inOther =
                       otherGroupId != null && otherGroupId !== selected.id
@@ -204,45 +578,125 @@ export function ManageGroupsModal({
                       : null
                     const checked = selectedSenders.includes(name)
                     return (
-                      <label key={name} className="manage-sender-row">
+                      <label
+                        key={name}
+                        className={
+                          'manage-sender-row' + (checked ? ' checked' : '')
+                        }
+                      >
                         <input
                           type="checkbox"
                           checked={checked}
+                          disabled={busy}
                           onChange={() => toggleSender(name)}
                         />
-                        <span className="facet-label">{name}</span>
+                        <span className="facet-label" title={name}>
+                          {name}
+                        </span>
                         {otherName && (
-                          <span className="manage-sender-meta">{otherName}</span>
+                          <span
+                            className="manage-sender-meta"
+                            title={`Currently in ${otherName}`}
+                          >
+                            in {otherName}
+                          </span>
                         )}
                       </label>
                     )
                   })}
                   {allSenders.length === 0 && (
-                    <div className="sidebar-empty">No senders</div>
+                    <div className="manage-empty">
+                      <p>No senders yet</p>
+                      <span>Sync mail to populate senders.</span>
+                    </div>
+                  )}
+                  {allSenders.length > 0 && filteredSenders.length === 0 && (
+                    <div className="manage-empty">
+                      <p>No matches</p>
+                      <span>Try another search or filter.</span>
+                    </div>
                   )}
                 </div>
-                <div className="edit-modal-actions">
-                  <button type="button" className="btn-clear" onClick={onClose}>
-                    Close
-                  </button>
-                  <button
-                    type="button"
-                    className="btn-download"
-                    disabled={busy}
-                    onClick={() =>
-                      void run(() => onSetMembers(selected.id, selectedSenders))
-                    }
-                  >
-                    {busy ? 'Saving…' : 'Save members'}
-                  </button>
+
+                <div className="manage-footer">
+                  <div className="manage-danger-zone">
+                    {confirmDelete ? (
+                      <>
+                        <span className="manage-danger-hint">Delete this group?</span>
+                        <button
+                          type="button"
+                          className="manage-text-btn"
+                          disabled={busy}
+                          onClick={() => setConfirmDelete(false)}
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          className="btn-danger"
+                          disabled={busy}
+                          onClick={() =>
+                            void run(async () => {
+                              const id = selected.id
+                              await onDelete(id)
+                              draftGroupId.current = null
+                              setSelectedId(null)
+                              setConfirmDelete(false)
+                              setStatus('Group deleted')
+                            })
+                          }
+                        >
+                          Confirm delete
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        type="button"
+                        className="manage-text-btn manage-text-btn--danger"
+                        disabled={busy}
+                        onClick={() => setConfirmDelete(true)}
+                      >
+                        Delete group
+                      </button>
+                    )}
+                  </div>
+                  <div className="edit-modal-actions manage-footer-actions">
+                    <button
+                      type="button"
+                      className="btn-clear"
+                      disabled={busy}
+                      onClick={requestClose}
+                    >
+                      Close
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-download"
+                      disabled={busy || !dirty}
+                      onClick={saveAll}
+                    >
+                      {busy ? 'Saving…' : 'Save changes'}
+                    </button>
+                  </div>
                 </div>
               </>
             ) : (
-              <div className="sidebar-empty">Select or create a group</div>
+              <div className="manage-empty manage-empty--panel">
+                <p>Select or create a group</p>
+                <span>Pick a group on the left to edit its members.</span>
+              </div>
             )}
-          </div>
+          </section>
         </div>
-        {error && <div className="edit-modal-error">{error}</div>}
+
+        <div className="manage-status-row" aria-live="polite">
+          {error && (
+            <div className="edit-modal-error" role="alert">
+              {error}
+            </div>
+          )}
+          {!error && status && <div className="manage-status-ok">{status}</div>}
+        </div>
       </div>
     </div>
   )

@@ -60,6 +60,7 @@ export default function App() {
     setMembers,
     moveSender,
     hideSender,
+    reorderGroups,
   } = useSenderGroups()
   const { checked, toggle, selectAll, clear } = useSelection()
   const {
@@ -246,6 +247,7 @@ export default function App() {
                 onSetGroupMembers={setMembers}
                 onMoveSender={moveSender}
                 onHideSender={hideSender}
+                onReorderGroups={reorderGroups}
               />
               <DocumentTable
                 list={list}

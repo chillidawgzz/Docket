@@ -478,6 +478,34 @@ function setHiddenSenders(senders) {
   return listSenderGroupsState();
 }
 
+function reorderSenderGroups(ids) {
+  if (!db) throw new Error('DB not initialized');
+  const existing = db
+    .prepare('SELECT id FROM sender_groups ORDER BY sort_order ASC, name COLLATE NOCASE ASC')
+    .all()
+    .map((r) => r.id);
+  const existingSet = new Set(existing);
+  const ordered = [];
+  const seen = new Set();
+  for (const raw of ids || []) {
+    const id = Number(raw);
+    if (!existingSet.has(id) || seen.has(id)) continue;
+    ordered.push(id);
+    seen.add(id);
+  }
+  for (const id of existing) {
+    if (!seen.has(id)) ordered.push(id);
+  }
+  const tx = db.transaction(() => {
+    const upd = db.prepare(
+      'UPDATE sender_groups SET sort_order = ? WHERE id = ?'
+    );
+    ordered.forEach((id, i) => upd.run(i + 1, id));
+  });
+  tx();
+  return listSenderGroupsState();
+}
+
 module.exports = {
   init,
   getDb,
@@ -503,4 +531,5 @@ module.exports = {
   removeSenderFromGroup,
   setSenderHidden,
   setHiddenSenders,
+  reorderSenderGroups,
 };

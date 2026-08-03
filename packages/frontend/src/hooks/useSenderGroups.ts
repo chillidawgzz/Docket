@@ -6,6 +6,7 @@ import {
   fetchSenderGroups,
   patchSenderGroup,
   removeSenderFromGroup,
+  reorderSenderGroups,
   setSenderGroupMembers,
   setSenderHidden,
 } from '../api/client'
@@ -110,6 +111,26 @@ export function useSenderGroups() {
     [apply],
   )
 
+  const reorderGroups = useCallback(
+    async (ids: number[]) => {
+      const byId = new Map(state.groups.map((g) => [g.id, g]))
+      const optimistic = ids
+        .map((id) => byId.get(id))
+        .filter((g): g is SenderGroupInfo => Boolean(g))
+      for (const g of state.groups) {
+        if (!ids.includes(g.id)) optimistic.push(g)
+      }
+      setState((prev) => ({ ...prev, groups: optimistic }))
+      try {
+        apply(await reorderSenderGroups(ids))
+      } catch {
+        await reload()
+        throw new Error('reorder failed')
+      }
+    },
+    [apply, reload, state.groups],
+  )
+
   return {
     groups: state.groups,
     hiddenSenders: state.hiddenSenders,
@@ -121,5 +142,6 @@ export function useSenderGroups() {
     setMembers,
     moveSender,
     hideSender,
+    reorderGroups,
   }
 }

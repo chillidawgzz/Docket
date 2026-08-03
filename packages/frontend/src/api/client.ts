@@ -131,6 +131,18 @@ export async function setSenderHidden(
   )
 }
 
+export async function reorderSenderGroups(
+  ids: number[],
+): Promise<SenderGroupsStateDTO> {
+  return senderGroupsResponse(
+    await fetch('/api/sender-groups/reorder', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids }),
+    }),
+  )
+}
+
 export async function patchDocument(
   id: string,
   body: { filename?: string; tags?: string[] },

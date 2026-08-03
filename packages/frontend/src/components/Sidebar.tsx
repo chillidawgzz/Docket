@@ -10,6 +10,16 @@ import { tagColor } from '../lib/tagColor'
 import { ManageGroupsModal } from './ManageGroupsModal'
 import { TagPicker } from './TagPicker'
 
+const OTHER_COLLAPSED_KEY = 'docket.otherSendersCollapsed'
+
+function loadOtherCollapsed() {
+  try {
+    return localStorage.getItem(OTHER_COLLAPSED_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
 interface SidebarProps {
   docs: Document[]
   filters: FilterState
@@ -35,6 +45,7 @@ interface SidebarProps {
   onSetGroupMembers: (id: number, senders: string[]) => Promise<void>
   onMoveSender: (sender: string, groupId: number | null) => Promise<void>
   onHideSender: (sender: string, hidden: boolean) => Promise<void>
+  onReorderGroups: (ids: number[]) => Promise<void>
 }
 
 type MenuKey = string | null
@@ -122,12 +133,22 @@ export function Sidebar({
   onSetGroupMembers,
   onMoveSender,
   onHideSender,
+  onReorderGroups,
 }: SidebarProps) {
   const senders = bySenderName(docs)
   const tags = byTag(docs)
   const [menu, setMenu] = useState<MenuKey>(null)
   const [manageOpen, setManageOpen] = useState(false)
+  const [otherCollapsed, setOtherCollapsed] = useState(loadOtherCollapsed)
   const hiddenSet = useMemo(() => new Set(hiddenSenders), [hiddenSenders])
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(OTHER_COLLAPSED_KEY, otherCollapsed ? '1' : '0')
+    } catch {
+      /* ignore */
+    }
+  }, [otherCollapsed])
 
   const senderMeta = useMemo(() => {
     const map = new Map(senders.map((s) => [s.name, s]))
@@ -255,10 +276,18 @@ export function Sidebar({
           }
         >
           <div className="facet-list">
-            {groups.map((g) => {
+            {groups.map((g, index) => {
               const menuKey = `group:${g.id}`
               const active = filters.groupFilter === g.id
               const count = groupCount(g)
+              const moveGroup = (toIndex: number) => {
+                const ids = groups.map((x) => x.id)
+                const from = ids.indexOf(g.id)
+                if (from < 0 || toIndex < 0 || toIndex >= ids.length) return
+                ids.splice(from, 1)
+                ids.splice(toIndex, 0, g.id)
+                void onReorderGroups(ids)
+              }
               return (
                 <div key={g.id} className="sender-group-block">
                   <div
@@ -304,6 +333,28 @@ export function Sidebar({
                         <button
                           type="button"
                           className="facet-menu-item"
+                          disabled={index === 0}
+                          onClick={() => {
+                            moveGroup(index - 1)
+                            closeMenu()
+                          }}
+                        >
+                          Move up
+                        </button>
+                        <button
+                          type="button"
+                          className="facet-menu-item"
+                          disabled={index === groups.length - 1}
+                          onClick={() => {
+                            moveGroup(index + 1)
+                            closeMenu()
+                          }}
+                        >
+                          Move down
+                        </button>
+                        <button
+                          type="button"
+                          className="facet-menu-item"
                           onClick={() => {
                             void onUpdateGroup(g.id, { hidden: !g.hidden })
                             closeMenu()
@@ -346,7 +397,17 @@ export function Sidebar({
 
             <div className="sender-group-block">
               <div className="facet-row-wrap group-row other-row">
-                <span className="facet-collapse-spacer" />
+                <button
+                  type="button"
+                  className="facet-collapse-btn"
+                  aria-label={
+                    otherCollapsed ? 'Expand Other' : 'Collapse Other'
+                  }
+                  aria-expanded={!otherCollapsed}
+                  onClick={() => setOtherCollapsed((v) => !v)}
+                >
+                  {otherCollapsed ? '▸' : '▾'}
+                </button>
                 <div className="facet-row facet-row--group facet-row--static">
                   <span className="facet-label">Other</span>
                   <span className="facet-count">
@@ -354,14 +415,16 @@ export function Sidebar({
                   </span>
                 </div>
               </div>
-              <div className="sender-group-members">
-                {otherSenders.map((s) =>
-                  renderSenderRow(s.name, s.initials, s.count, null),
-                )}
-                {otherSenders.length === 0 && (
-                  <div className="sidebar-empty">no ungrouped senders</div>
-                )}
-              </div>
+              {!otherCollapsed && (
+                <div className="sender-group-members">
+                  {otherSenders.map((s) =>
+                    renderSenderRow(s.name, s.initials, s.count, null),
+                  )}
+                  {otherSenders.length === 0 && (
+                    <div className="sidebar-empty">no ungrouped senders</div>
+                  )}
+                </div>
+              )}
             </div>
 
             {senders.length === 0 && (
@@ -482,6 +545,7 @@ export function Sidebar({
         onRename={(id, name) => onUpdateGroup(id, { name })}
         onDelete={onDeleteGroup}
         onSetMembers={onSetGroupMembers}
+        onReorder={onReorderGroups}
       />
     </div>
   )
