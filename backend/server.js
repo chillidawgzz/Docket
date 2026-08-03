@@ -47,6 +47,107 @@ app.get('/api/tags', (req, res) => {
   res.json(db.listTags());
 });
 
+app.get('/api/sender-groups', (req, res) => {
+  try {
+    res.json(db.listSenderGroupsState());
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/sender-groups', (req, res) => {
+  try {
+    const group = db.createSenderGroup(req.body?.name);
+    if (!group) return res.status(400).json({ error: 'invalid name' });
+    res.status(201).json(db.listSenderGroupsState());
+  } catch (err) {
+    if (err.code === 'DUPLICATE') return res.status(409).json({ error: err.message });
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.patch('/api/sender-groups/:id', (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const group = db.updateSenderGroup(id, req.body || {});
+    if (!group) return res.status(404).json({ error: 'not found' });
+    res.json(db.listSenderGroupsState());
+  } catch (err) {
+    if (err.code === 'DUPLICATE' || err.code === 'INVALID') {
+      return res.status(400).json({ error: err.message });
+    }
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/sender-groups/:id', (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!db.deleteSenderGroup(id)) return res.status(404).json({ error: 'not found' });
+    res.json(db.listSenderGroupsState());
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/api/sender-groups/:id/members', (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const group = db.setSenderGroupMembers(id, req.body?.senders || []);
+    if (!group) return res.status(404).json({ error: 'not found' });
+    res.json(db.listSenderGroupsState());
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/sender-groups/:id/members', (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const state = db.addSenderToGroup(id, req.body?.sender);
+    if (!state) return res.status(404).json({ error: 'not found' });
+    res.json(state);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/sender-groups/:id/members/:sender', (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const sender = decodeURIComponent(req.params.sender);
+    res.json(db.removeSenderFromGroup(id, sender));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/hidden-senders/:sender', (req, res) => {
+  try {
+    const sender = decodeURIComponent(req.params.sender);
+    res.json(db.setSenderHidden(sender, true));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/hidden-senders/:sender', (req, res) => {
+  try {
+    const sender = decodeURIComponent(req.params.sender);
+    res.json(db.setSenderHidden(sender, false));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/api/hidden-senders', (req, res) => {
+  try {
+    res.json(db.setHiddenSenders(req.body?.senders || []));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.patch('/api/documents/:id', (req, res) => {
   try {
     const id = req.params.id;

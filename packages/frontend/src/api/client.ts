@@ -1,6 +1,7 @@
 import type {
   Document,
   DocumentDTO,
+  SenderGroupsStateDTO,
   SyncConfig,
   SyncEvent,
   SyncOptions,
@@ -38,6 +39,96 @@ export async function fetchTags(): Promise<TagInfo[]> {
   const res = await fetch('/api/tags')
   if (!res.ok) throw new Error('tags failed')
   return res.json()
+}
+
+async function senderGroupsResponse(res: Response): Promise<SenderGroupsStateDTO> {
+  if (!res.ok) throw new Error('sender groups failed')
+  return res.json()
+}
+
+export async function fetchSenderGroups(): Promise<SenderGroupsStateDTO> {
+  return senderGroupsResponse(await fetch('/api/sender-groups'))
+}
+
+export async function createSenderGroup(
+  name: string,
+): Promise<SenderGroupsStateDTO> {
+  return senderGroupsResponse(
+    await fetch('/api/sender-groups', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+    }),
+  )
+}
+
+export async function patchSenderGroup(
+  id: number,
+  body: { name?: string; collapsed?: boolean; hidden?: boolean },
+): Promise<SenderGroupsStateDTO> {
+  return senderGroupsResponse(
+    await fetch(`/api/sender-groups/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }),
+  )
+}
+
+export async function deleteSenderGroup(
+  id: number,
+): Promise<SenderGroupsStateDTO> {
+  return senderGroupsResponse(
+    await fetch(`/api/sender-groups/${id}`, { method: 'DELETE' }),
+  )
+}
+
+export async function setSenderGroupMembers(
+  id: number,
+  senders: string[],
+): Promise<SenderGroupsStateDTO> {
+  return senderGroupsResponse(
+    await fetch(`/api/sender-groups/${id}/members`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ senders }),
+    }),
+  )
+}
+
+export async function addSenderToGroup(
+  id: number,
+  sender: string,
+): Promise<SenderGroupsStateDTO> {
+  return senderGroupsResponse(
+    await fetch(`/api/sender-groups/${id}/members`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sender }),
+    }),
+  )
+}
+
+export async function removeSenderFromGroup(
+  id: number,
+  sender: string,
+): Promise<SenderGroupsStateDTO> {
+  return senderGroupsResponse(
+    await fetch(
+      `/api/sender-groups/${id}/members/${encodeURIComponent(sender)}`,
+      { method: 'DELETE' },
+    ),
+  )
+}
+
+export async function setSenderHidden(
+  sender: string,
+  hidden: boolean,
+): Promise<SenderGroupsStateDTO> {
+  const path = `/api/hidden-senders/${encodeURIComponent(sender)}`
+  return senderGroupsResponse(
+    await fetch(path, { method: hidden ? 'POST' : 'DELETE' }),
+  )
 }
 
 export async function patchDocument(

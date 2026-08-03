@@ -46,6 +46,19 @@ export interface TagInfo {
   count: number
 }
 
+export interface SenderGroupDTO {
+  id: number
+  name: string
+  collapsed: boolean
+  hidden: boolean
+  senders: string[]
+}
+
+export interface SenderGroupsStateDTO {
+  groups: SenderGroupDTO[]
+  hiddenSenders: string[]
+}
+
 export interface SyncStatus {
   scanning: boolean
   paused?: boolean

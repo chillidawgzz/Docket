@@ -5,10 +5,24 @@ export type TagMode = 'and' | 'or'
 export interface FilterState {
   search: string
   senderFilter: string | null
+  groupFilter: number | null
   tagFilters: string[]
   tagMode: TagMode
   dateFrom: string | null // YYYY-MM-DD
   dateTo: string | null
+}
+
+export interface SenderGroupInfo {
+  id: number
+  name: string
+  collapsed: boolean
+  hidden: boolean
+  senders: string[]
+}
+
+export interface SenderGroupsState {
+  groups: SenderGroupInfo[]
+  hiddenSenders: string[]
 }
 
 export function bySenderName(docs: Document[]) {
@@ -39,7 +53,9 @@ export function byTag(docs: Document[]) {
   }
   return Object.entries(map)
     .map(([name, count]) => ({ name, count }))
-    .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }))
+    .sort((a, b) =>
+      a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }),
+    )
 }
 
 function dayStart(isoDate: string): number {
@@ -50,13 +66,41 @@ function dayEnd(isoDate: string): number {
   return new Date(isoDate + 'T23:59:59.999').getTime()
 }
 
-export function filteredDocs(docs: Document[], state: FilterState): Document[] {
+/** Senders excluded by individual hide or hidden group membership. */
+export function effectiveHiddenSenders(
+  groups: SenderGroupInfo[],
+  hiddenSenders: string[],
+): Set<string> {
+  const set = new Set(hiddenSenders)
+  for (const g of groups) {
+    if (!g.hidden) continue
+    for (const s of g.senders) set.add(s)
+  }
+  return set
+}
+
+export function filteredDocs(
+  docs: Document[],
+  state: FilterState,
+  groups: SenderGroupInfo[] = [],
+  hiddenSenders: string[] = [],
+): Document[] {
   const q = state.search.trim().toLowerCase()
   const fromTs = state.dateFrom ? dayStart(state.dateFrom) : null
   const toTs = state.dateTo ? dayEnd(state.dateTo) : null
+  const hidden = effectiveHiddenSenders(groups, hiddenSenders)
+
+  let groupSenders: Set<string> | null = null
+  if (state.groupFilter != null) {
+    const g = groups.find((x) => x.id === state.groupFilter)
+    if (g) groupSenders = new Set(g.senders)
+  }
 
   return docs.filter((d) => {
+    if (hidden.has(d.sender.name)) return false
+
     if (state.senderFilter && d.sender.name !== state.senderFilter) return false
+    if (groupSenders && !groupSenders.has(d.sender.name)) return false
 
     if (state.tagFilters.length) {
       const tags = d.tags.map((t) => t.toLowerCase())

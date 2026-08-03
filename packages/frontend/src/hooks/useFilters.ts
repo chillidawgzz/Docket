@@ -4,6 +4,7 @@ import type { FilterState, TagMode } from '../lib/filters'
 const initial: FilterState = {
   search: '',
   senderFilter: null,
+  groupFilter: null,
   tagFilters: [],
   tagMode: 'or',
   dateFrom: null,
@@ -20,7 +21,16 @@ export function useFilters() {
   const toggleSender = useCallback((name: string) => {
     setFilters((f) => ({
       ...f,
+      groupFilter: null,
       senderFilter: f.senderFilter === name ? null : name,
+    }))
+  }, [])
+
+  const toggleGroup = useCallback((groupId: number) => {
+    setFilters((f) => ({
+      ...f,
+      senderFilter: null,
+      groupFilter: f.groupFilter === groupId ? null : groupId,
     }))
   }, [])
 
@@ -60,6 +70,7 @@ export function useFilters() {
 
   const anyFilter =
     !!filters.senderFilter ||
+    filters.groupFilter != null ||
     filters.tagFilters.length > 0 ||
     !!filters.dateFrom ||
     !!filters.dateTo ||
@@ -69,6 +80,7 @@ export function useFilters() {
     filters,
     setSearch,
     toggleSender,
+    toggleGroup,
     toggleTagFilter,
     setTagFilters,
     setTagMode,

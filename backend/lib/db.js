@@ -49,6 +49,22 @@ function init() {
       tag_id INTEGER NOT NULL,
       PRIMARY KEY (document_id, tag_id)
     );
+    CREATE TABLE IF NOT EXISTS sender_groups (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL COLLATE NOCASE UNIQUE,
+      collapsed INTEGER NOT NULL DEFAULT 0,
+      hidden INTEGER NOT NULL DEFAULT 0,
+      sort_order INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE TABLE IF NOT EXISTS sender_group_members (
+      group_id INTEGER NOT NULL,
+      sender_name TEXT NOT NULL,
+      PRIMARY KEY (group_id, sender_name),
+      FOREIGN KEY (group_id) REFERENCES sender_groups(id) ON DELETE CASCADE
+    );
+    CREATE TABLE IF NOT EXISTS hidden_senders (
+      sender_name TEXT PRIMARY KEY
+    );
   `);
 
   if (!hasColumn('documents', 'download_filename')) {
@@ -273,6 +289,195 @@ function getDb() {
   return db;
 }
 
+function listSenderGroupsState() {
+  if (!db) throw new Error('DB not initialized');
+  const groups = db
+    .prepare(
+      `SELECT id, name, collapsed, hidden, sort_order
+       FROM sender_groups
+       ORDER BY sort_order ASC, name COLLATE NOCASE ASC`
+    )
+    .all()
+    .map((g) => ({
+      id: g.id,
+      name: g.name,
+      collapsed: Boolean(g.collapsed),
+      hidden: Boolean(g.hidden),
+      senders: db
+        .prepare(
+          `SELECT sender_name FROM sender_group_members
+           WHERE group_id = ?
+           ORDER BY sender_name COLLATE NOCASE`
+        )
+        .all(g.id)
+        .map((r) => r.sender_name),
+    }));
+  const hiddenSenders = db
+    .prepare('SELECT sender_name FROM hidden_senders ORDER BY sender_name COLLATE NOCASE')
+    .all()
+    .map((r) => r.sender_name);
+  return { groups, hiddenSenders };
+}
+
+function createSenderGroup(name) {
+  if (!db) throw new Error('DB not initialized');
+  const trimmed = String(name || '').trim();
+  if (!trimmed) return null;
+  const maxOrder = db.prepare('SELECT COALESCE(MAX(sort_order), 0) AS m FROM sender_groups').get().m;
+  try {
+    const info = db
+      .prepare(
+        'INSERT INTO sender_groups (name, collapsed, hidden, sort_order) VALUES (?, 0, 0, ?)'
+      )
+      .run(trimmed, maxOrder + 1);
+    return listSenderGroupsState().groups.find((g) => g.id === Number(info.lastInsertRowid)) || null;
+  } catch (err) {
+    if (String(err.message || '').includes('UNIQUE')) {
+      const err2 = new Error('group name already exists');
+      err2.code = 'DUPLICATE';
+      throw err2;
+    }
+    throw err;
+  }
+}
+
+function getSenderGroupRow(id) {
+  return db.prepare('SELECT * FROM sender_groups WHERE id = ?').get(id);
+}
+
+function updateSenderGroup(id, patch) {
+  if (!db) throw new Error('DB not initialized');
+  const row = getSenderGroupRow(id);
+  if (!row) return null;
+
+  const name =
+    patch.name !== undefined ? String(patch.name || '').trim() : row.name;
+  if (!name) {
+    const err = new Error('invalid name');
+    err.code = 'INVALID';
+    throw err;
+  }
+  const collapsed =
+    patch.collapsed !== undefined ? (patch.collapsed ? 1 : 0) : row.collapsed;
+  const hidden =
+    patch.hidden !== undefined ? (patch.hidden ? 1 : 0) : row.hidden;
+
+  try {
+    db.prepare(
+      'UPDATE sender_groups SET name = ?, collapsed = ?, hidden = ? WHERE id = ?'
+    ).run(name, collapsed, hidden, id);
+  } catch (err) {
+    if (String(err.message || '').includes('UNIQUE')) {
+      const err2 = new Error('group name already exists');
+      err2.code = 'DUPLICATE';
+      throw err2;
+    }
+    throw err;
+  }
+  return listSenderGroupsState().groups.find((g) => g.id === Number(id)) || null;
+}
+
+function deleteSenderGroup(id) {
+  if (!db) throw new Error('DB not initialized');
+  const row = getSenderGroupRow(id);
+  if (!row) return false;
+  const tx = db.transaction(() => {
+    db.prepare('DELETE FROM sender_group_members WHERE group_id = ?').run(id);
+    db.prepare('DELETE FROM sender_groups WHERE id = ?').run(id);
+  });
+  tx();
+  return true;
+}
+
+function setSenderGroupMembers(id, senders) {
+  if (!db) throw new Error('DB not initialized');
+  const row = getSenderGroupRow(id);
+  if (!row) return null;
+
+  const names = Array.from(
+    new Set(
+      (senders || [])
+        .map((s) => String(s || '').trim())
+        .filter(Boolean)
+    )
+  );
+
+  const tx = db.transaction(() => {
+    db.prepare('DELETE FROM sender_group_members WHERE group_id = ?').run(id);
+    const removeElsewhere = db.prepare(
+      'DELETE FROM sender_group_members WHERE sender_name = ?'
+    );
+    const insert = db.prepare(
+      'INSERT INTO sender_group_members (group_id, sender_name) VALUES (?, ?)'
+    );
+    for (const name of names) {
+      removeElsewhere.run(name);
+      insert.run(id, name);
+    }
+  });
+  tx();
+  return listSenderGroupsState().groups.find((g) => g.id === Number(id)) || null;
+}
+
+function addSenderToGroup(id, senderName) {
+  if (!db) throw new Error('DB not initialized');
+  const row = getSenderGroupRow(id);
+  if (!row) return null;
+  const name = String(senderName || '').trim();
+  if (!name) return null;
+
+  const tx = db.transaction(() => {
+    db.prepare('DELETE FROM sender_group_members WHERE sender_name = ?').run(name);
+    db.prepare(
+      'INSERT OR IGNORE INTO sender_group_members (group_id, sender_name) VALUES (?, ?)'
+    ).run(id, name);
+  });
+  tx();
+  return listSenderGroupsState();
+}
+
+function removeSenderFromGroup(id, senderName) {
+  if (!db) throw new Error('DB not initialized');
+  const name = String(senderName || '').trim();
+  if (!name) return listSenderGroupsState();
+  db.prepare(
+    'DELETE FROM sender_group_members WHERE group_id = ? AND sender_name = ?'
+  ).run(id, name);
+  return listSenderGroupsState();
+}
+
+function setSenderHidden(senderName, hidden) {
+  if (!db) throw new Error('DB not initialized');
+  const name = String(senderName || '').trim();
+  if (!name) return listSenderGroupsState();
+  if (hidden) {
+    db.prepare('INSERT OR IGNORE INTO hidden_senders (sender_name) VALUES (?)').run(name);
+  } else {
+    db.prepare('DELETE FROM hidden_senders WHERE sender_name = ?').run(name);
+  }
+  return listSenderGroupsState();
+}
+
+function setHiddenSenders(senders) {
+  if (!db) throw new Error('DB not initialized');
+  const names = Array.from(
+    new Set(
+      (senders || [])
+        .map((s) => String(s || '').trim())
+        .filter(Boolean)
+    )
+  );
+  const tx = db.transaction(() => {
+    db.prepare('DELETE FROM hidden_senders').run();
+    const insert = db.prepare(
+      'INSERT INTO hidden_senders (sender_name) VALUES (?)'
+    );
+    for (const name of names) insert.run(name);
+  });
+  tx();
+  return listSenderGroupsState();
+}
+
 module.exports = {
   init,
   getDb,
@@ -289,4 +494,13 @@ module.exports = {
   getSyncStatus,
   getLatestMessageDate,
   getLatestMessageDateForLabel,
+  listSenderGroupsState,
+  createSenderGroup,
+  updateSenderGroup,
+  deleteSenderGroup,
+  setSenderGroupMembers,
+  addSenderToGroup,
+  removeSenderFromGroup,
+  setSenderHidden,
+  setHiddenSenders,
 };

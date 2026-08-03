@@ -14,6 +14,7 @@ import { ViewModal } from './components/ViewModal'
 import { useDocuments } from './hooks/useDocuments'
 import { useFilters } from './hooks/useFilters'
 import { useSelection } from './hooks/useSelection'
+import { useSenderGroups } from './hooks/useSenderGroups'
 import { useSyncStatus } from './hooks/useSyncStatus'
 import { useTags } from './hooks/useTags'
 import { filteredDocs } from './lib/filters'
@@ -41,6 +42,7 @@ export default function App() {
     filters,
     setSearch,
     toggleSender,
+    toggleGroup,
     toggleTagFilter,
     setTagFilters,
     setTagMode,
@@ -49,6 +51,16 @@ export default function App() {
     clearFilters,
     anyFilter,
   } = useFilters()
+  const {
+    groups,
+    hiddenSenders,
+    createGroup,
+    updateGroup,
+    removeGroup,
+    setMembers,
+    moveSender,
+    hideSender,
+  } = useSenderGroups()
   const { checked, toggle, selectAll, clear } = useSelection()
   const {
     ui: syncUi,
@@ -102,7 +114,10 @@ export default function App() {
     [sidebarWidth],
   )
 
-  const list = useMemo(() => filteredDocs(docs, filters), [docs, filters])
+  const list = useMemo(
+    () => filteredDocs(docs, filters, groups, hiddenSenders),
+    [docs, filters, groups, hiddenSenders],
+  )
 
   const previewDoc = previewId
     ? (docs.find((d) => d.id === previewId) ?? null)
@@ -206,9 +221,15 @@ export default function App() {
                 filters={filters}
                 anyFilter={anyFilter}
                 tagSuggestions={tagNames}
+                groups={groups}
+                hiddenSenders={hiddenSenders}
                 onResizeStart={onSidebarResizeStart}
                 onToggleSender={(name) => {
                   toggleSender(name)
+                  closeMobileSidebar()
+                }}
+                onToggleGroup={(groupId) => {
+                  toggleGroup(groupId)
                   closeMobileSidebar()
                 }}
                 onToggleTag={(tag) => {
@@ -219,6 +240,12 @@ export default function App() {
                 onSetDateFrom={setDateFrom}
                 onSetDateTo={setDateTo}
                 onClearFilters={clearFilters}
+                onCreateGroup={createGroup}
+                onUpdateGroup={updateGroup}
+                onDeleteGroup={removeGroup}
+                onSetGroupMembers={setMembers}
+                onMoveSender={moveSender}
+                onHideSender={hideSender}
               />
               <DocumentTable
                 list={list}
