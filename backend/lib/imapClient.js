@@ -292,6 +292,103 @@ function isAttachmentWanted(att) {
   return !!att.filename && att.size > 10 * 1024 && !att.cid;
 }
 
+/** Mirror isAttachmentWanted for ImapFlow bodyStructure nodes. */
+function isStructurePartWanted(node) {
+  const disposition = String(node.disposition || '').toLowerCase();
+  const filename =
+    (node.dispositionParameters && node.dispositionParameters.filename) ||
+    (node.parameters && node.parameters.name) ||
+    '';
+  const size = Number(node.size) || 0;
+  const cid = node.id || '';
+  if (disposition === 'attachment') return true;
+  return !!filename && size > 10 * 1024 && !cid;
+}
+
+function listWantedAttachmentParts(node, out = []) {
+  if (!node) return out;
+  const type = String(node.type || '').toLowerCase();
+  const topType = type.split('/')[0];
+  if (topType !== 'multipart' && isStructurePartWanted(node)) {
+    out.push({
+      part: node.part || '1',
+      contentType: type || 'application/octet-stream',
+      filename:
+        (node.dispositionParameters && node.dispositionParameters.filename) ||
+        (node.parameters && node.parameters.name) ||
+        'attachment',
+      size: Number(node.size) || 0,
+    });
+  }
+  if (node.childNodes) {
+    for (const child of node.childNodes) listWantedAttachmentParts(child, out);
+  }
+  return out;
+}
+
+async function streamToBuffer(stream) {
+  const chunks = [];
+  for await (const chunk of stream) chunks.push(chunk);
+  return Buffer.concat(chunks);
+}
+
+/**
+ * Prefer downloading only the MIME part (fast for small attachments in large
+ * emails). Fall back to full-message parse if structure/index doesn't line up.
+ */
+async function fetchAttachmentFromImap(client, doc, ref) {
+  const uid = String(ref.uid);
+  const index = Number(ref.attachment_index);
+
+  try {
+    const message = await client.fetchOne(
+      uid,
+      { bodyStructure: true },
+      { uid: true },
+    );
+    const parts = listWantedAttachmentParts(
+      message && message.bodyStructure,
+    );
+    const part = parts[index];
+    if (part && part.part) {
+      const { meta, content } = await client.download(uid, part.part, {
+        uid: true,
+      });
+      const buffer = await streamToBuffer(content);
+      const sourceFilename =
+        (meta && meta.filename) || part.filename || 'attachment';
+      console.log(
+        `[download] Part fetch ${doc.id} part=${part.part} (${buffer.length} bytes)`,
+      );
+      return {
+        buffer,
+        sourceFilename,
+        contentType:
+          (meta && meta.contentType) ||
+          part.contentType ||
+          'application/octet-stream',
+      };
+    }
+    console.warn(
+      `[download] No structure part for ${doc.id} index=${index} (found ${parts.length}); falling back`,
+    );
+  } catch (err) {
+    console.warn(
+      `[download] Part fetch failed for ${doc.id}: ${err.message}; falling back`,
+    );
+  }
+
+  const { content } = await client.download(uid, undefined, { uid: true });
+  const parsed = await simpleParser(content);
+  const att = parsed.attachments[index];
+  if (!att) return null;
+  return {
+    buffer: att.content,
+    sourceFilename: att.filename || 'attachment',
+    contentType: att.contentType || 'application/octet-stream',
+  };
+}
+
 function initials(name) {
   if (!name) return '?';
   const parts = name.trim().split(/\s+/).slice(0, 2);
@@ -634,19 +731,16 @@ async function downloadAttachmentUncached(id) {
   const file = await withImapClient(async (client) => {
     const lock = await client.getMailboxLock(doc.label || 'INBOX');
     try {
-      const { content } = await client.download(String(ref.uid), undefined, { uid: true });
-      const parsed = await simpleParser(content);
-      const att = parsed.attachments[ref.attachment_index];
-      if (!att) return null;
+      const fetched = await fetchAttachmentFromImap(client, doc, ref);
+      if (!fetched) return null;
       const meta = db.getDocumentMeta(id);
-      const sourceFilename =
-        att.filename || (meta && meta.filename) || 'attachment';
+      const sourceFilename = fetched.sourceFilename || 'attachment';
       const filename = (meta && meta.filename) || sourceFilename;
       return {
-        buffer: att.content,
+        buffer: fetched.buffer,
         filename,
         sourceFilename,
-        contentType: att.contentType || 'application/octet-stream',
+        contentType: fetched.contentType || 'application/octet-stream',
       };
     } finally {
       lock.release();

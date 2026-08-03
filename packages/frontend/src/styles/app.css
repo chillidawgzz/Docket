@@ -170,6 +170,14 @@
     flex-direction:column;
     min-height:0;
   }
+  .body.sync-view .preview-page{
+    height:100%;
+    max-height:100%;
+    overflow:hidden;
+    display:flex;
+    flex-direction:column;
+    min-height:0;
+  }
   .groups-page-inner{
     flex:1;
     min-height:0;
@@ -179,10 +187,26 @@
     flex-direction:column;
     overflow:hidden;
   }
-  .groups-page .sync-header{
+  .preview-page-inner{
+    flex:1;
+    min-height:0;
+    max-width:1100px;
+    width:100%;
+    display:flex;
+    flex-direction:column;
+    overflow:hidden;
+  }
+  .groups-page .sync-header,
+  .preview-page .sync-header{
     flex:none;
   }
   .groups-page-layout{
+    flex:1;
+    min-height:0;
+    overflow:hidden;
+    align-items:stretch;
+  }
+  .preview-page-layout{
     flex:1;
     min-height:0;
     overflow:hidden;
@@ -2318,10 +2342,11 @@
   overflow:hidden;
 }
 .sync-page.preview-page{
-  overflow:auto;
+  overflow:hidden;
 }
 .preview-page-inner{
   max-width:1100px;
+  width:100%;
 }
 .preview-page-title{
   overflow:hidden;
@@ -2424,29 +2449,57 @@
   display:grid;
   grid-template-columns:minmax(0, 1.1fr) minmax(0, 0.9fr);
   gap:var(--space-5);
-  align-items:start;
+  align-items:stretch;
+  min-height:0;
 }
 .preview-page-panel{
   display:flex;
   flex-direction:column;
   gap:var(--space-4);
   min-width:0;
+  min-height:0;
+  height:100%;
+}
+.preview-page-panel--media .drawer-preview-container{
+  flex:1 1 0;
+  min-height:0;
+  display:flex;
+  flex-direction:column;
+}
+.preview-page-panel--media .drawer-preview-box,
+.preview-page-panel--media .drawer-preview-box--tall{
+  flex:1 1 0;
+  width:100%;
+  height:100%;
+  min-height:0;
+  max-height:none;
+}
+.preview-page-panel--media .drawer-preview-img{
+  max-height:100%;
+  max-width:100%;
+}
+.preview-page-panel--media .drawer-preview-canvas{
+  max-height:100%;
+  max-width:100%;
 }
 .preview-page-panel .drawer-meta{
   flex-shrink:0;
 }
 .preview-page-panel .drawer-email{
-  flex:none;
-  max-height:min(60vh, 560px);
+  flex:1 1 0;
+  min-height:0;
+  max-height:none;
 }
 .preview-page-panel .drawer-email-body{
   flex:1;
-  min-height:160px;
+  min-height:0;
+  overflow:auto;
 }
 .preview-page-actions{
   display:flex;
   flex-wrap:wrap;
   gap:var(--space-2);
+  flex:none;
 }
 .preview-page-actions .btn-view,
 .preview-page-actions .btn-download{

@@ -232,7 +232,7 @@ export function PreviewPage({ doc, onBack, onView, onRename }: PreviewPageProps)
         </header>
 
         <div className="preview-page-layout">
-          <section className="preview-page-panel" aria-label="Attachment">
+          <section className="preview-page-panel preview-page-panel--media" aria-label="Attachment">
             <div className="drawer-preview-container">
               <AttachmentBody doc={doc} preview={preview} variant="compact" />
             </div>
