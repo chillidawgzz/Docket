@@ -27,6 +27,7 @@ If your real question is *“Where is that file someone emailed me?”* instead 
 - **Attachment previews** — PDF, images, text, Office (docx/xlsx), ICS, EML, audio/video where the browser allows
 - **Disk cache** — first preview hits IMAP; repeats serve from `data/attachments/`
 - **Bulk zip download** + LAN bind (`0.0.0.0:8420`)
+- **Docker** — same stack via [`Dockerfile`](Dockerfile) / [`docker-compose.yml`](docker-compose.yml)
 
 Express API lives under [`backend/`](backend/) (documents, tags, patch, preview, download, sync SSE). UI is [`packages/frontend/`](packages/frontend/).
 
@@ -49,6 +50,8 @@ Express API lives under [`backend/`](backend/) (documents, tags, patch, preview,
 | [`backend/server.js`](backend/server.js) | API entrypoint |
 | [`backend/lib/`](backend/lib/) | IMAP client, DB, preview types, disk cache |
 | [`packages/frontend/`](packages/frontend/) | React + TypeScript SPA (Vite) |
+| [`Dockerfile`](Dockerfile) | Container image (API + built UI) |
+| [`docker-compose.yml`](docker-compose.yml) | One-command Docker run with persistent data |
 | [`LICENSE`](LICENSE) | Proprietary copyright — view only, not free to copy |
 | [`.env.example`](.env.example) | Required Gmail/IMAP config template (no secrets) |
 
@@ -110,10 +113,47 @@ Attachment bytes: IMAP on first request → data/attachments/ cache → later hi
 
 ### Requirements
 
-- Node.js 18+ (with build tools for `better-sqlite3`)  
+- Node.js 18+ (with build tools for `better-sqlite3`), **or Docker**
 - A Gmail account with **2FA** and an [App Password](https://myaccount.google.com/apppasswords)
 
-### Setup
+### Docker (recommended for self-hosters)
+
+Same MVP, packaged for people who already run everything in Docker:
+
+```bash
+git clone git@github.com:chillidawgzz/Docket.git
+cd Docket
+cp .env.example .env
+# edit .env — set GMAIL_USER and GMAIL_APP_PASSWORD
+
+# Bind mounts need a real file (not a directory) for the SQLite DB
+touch data.db
+mkdir -p data/attachments
+
+docker compose up --build -d
+```
+
+Open `http://localhost:8420` (or `http://<your-lan-ip>:8420`).
+
+Use **Sync** in the UI to pull attachments into the local archive. Data persists in `./data.db` and `./data/` on the host.
+
+Stop:
+
+```bash
+docker compose down
+```
+
+Or without Compose:
+
+```bash
+docker build -t docket:mvp .
+docker run --rm -p 8420:8420 --env-file .env \
+  -v "$(pwd)/data.db:/app/data.db" \
+  -v "$(pwd)/data:/app/data" \
+  docket:mvp
+```
+
+### Bare metal (Node)
 
 ```bash
 git clone git@github.com:chillidawgzz/Docket.git
@@ -143,12 +183,12 @@ See [`.env.example`](.env.example). Critical variables:
 | --- | --- |
 | `GMAIL_USER` | Gmail address |
 | `GMAIL_APP_PASSWORD` | 16-character app password |
-| `IMAP_LABELS` | Comma-separated mailboxes/labels (default `INBOX`) |
+| `IMAP_LABELS` | Mailboxes to scan: `*` (all / Gmail All Mail), or comma-separated labels (default `*`) |
 | `IMAP_SINCE_DAYS` | How far back to scan (default `730`) |
 | `IMAP_MAX_MESSAGES` | Cap per label (default `2000`) |
 | `PORT` | HTTP port (default `8420`) |
 
-**Never commit `.env`.** Credentials stay local.
+**Never commit `.env`.** Credentials stay local. Pass them into Docker via `env_file: .env` / `--env-file .env`.
 
 ---
 

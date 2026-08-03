@@ -50,12 +50,12 @@ app.get('/api/tags', (req, res) => {
 app.patch('/api/documents/:id', (req, res) => {
   try {
     const id = req.params.id;
-    const { downloadFilename, tags } = req.body || {};
+    const { filename, tags } = req.body || {};
     let updated = false;
 
-    if (downloadFilename !== undefined) {
-      if (!db.setDownloadFilename(id, downloadFilename)) {
-        return res.status(404).json({ error: 'not found' });
+    if (filename !== undefined) {
+      if (!db.setFilename(id, filename)) {
+        return res.status(400).json({ error: 'invalid filename' });
       }
       updated = true;
     }
@@ -72,6 +72,7 @@ app.patch('/api/documents/:id', (req, res) => {
       return res.status(400).json({ error: 'no changes' });
     }
     const doc = imapClient.getDocuments().find((d) => d.id === id);
+    if (!doc) return res.status(404).json({ error: 'not found' });
     res.json(doc);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -114,28 +115,83 @@ app.get('/api/status', (req, res) => {
   res.json(imapClient.getStatus());
 });
 
-app.post('/api/sync', async (req, res) => {
-  log('Sync started');
+app.get('/api/sync/config', async (req, res) => {
+  try {
+    const config = imapClient.getSyncConfig();
+    let mailboxes = [];
+    try {
+      mailboxes = await imapClient.listMailboxes();
+    } catch (err) {
+      console.warn('[sync/config] mailboxes:', err.message);
+    }
+    res.json({ ...config, mailboxes });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/sync', (req, res) => {
+  const options = {
+    labels: req.body?.labels,
+    sinceDays: req.body?.sinceDays,
+    maxMessages: req.body?.maxMessages,
+    fullRescan: req.body?.fullRescan,
+  };
+  const result = imapClient.startSyncJob(options);
+  if (result.started) log('Sync started (background)');
+  else if (result.alreadyRunning) log('Sync already running — client rejoining');
+  else if (result.error) log(`Sync not started: ${result.error}`);
+  res.json({ ...result, status: imapClient.getStatus() });
+});
+
+app.post('/api/sync/pause', (req, res) => {
+  const result = imapClient.pauseSyncJob();
+  if (result.ok) log('Sync paused');
+  res.json({ ...result, status: imapClient.getStatus() });
+});
+
+app.post('/api/sync/resume', (req, res) => {
+  const result = imapClient.resumeSyncJob();
+  if (result.ok) log('Sync resumed');
+  res.json({ ...result, status: imapClient.getStatus() });
+});
+
+app.post('/api/sync/cancel', (req, res) => {
+  const result = imapClient.cancelSyncJob();
+  if (result.ok) log('Sync cancel requested');
+  res.json({ ...result, status: imapClient.getStatus() });
+});
+
+app.get('/api/sync/events', (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
   res.setHeader('X-Accel-Buffering', 'no');
+  if (typeof res.flushHeaders === 'function') res.flushHeaders();
 
-  const sendEvent = (data) => {
-    const event = typeof data === 'object' && !data.type ? { type: 'progress', ...data } : data;
-    res.write(`data: ${JSON.stringify(event)}\n\n`);
+  const send = (event) => {
+    try {
+      res.write(`data: ${JSON.stringify(event)}\n\n`);
+    } catch {
+      /* client gone */
+    }
   };
 
-  try {
-    const status = await imapClient.scan(sendEvent);
-    log(`Sync complete: ${status.messageCount} documents, error: ${status.error || 'none'}`);
-    sendEvent({ type: 'complete', status });
-    res.end();
-  } catch (err) {
-    log(`Sync error: ${err.message}`);
-    sendEvent({ type: 'error', error: err.message });
-    res.end();
-  }
+  const unsubscribe = imapClient.subscribeSync(send);
+  const ping = setInterval(() => {
+    try {
+      res.write(': ping\n\n');
+    } catch {
+      /* ignore */
+    }
+  }, 15000);
+
+  const cleanup = () => {
+    clearInterval(ping);
+    unsubscribe();
+  };
+  req.on('close', cleanup);
+  req.on('error', cleanup);
 });
 
 app.get('/api/documents/:id/preview', async (req, res) => {

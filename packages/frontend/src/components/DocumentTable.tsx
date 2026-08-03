@@ -58,18 +58,11 @@ function EditIcon() {
   )
 }
 
-type ColKey =
-  | 'name'
-  | 'downloadFilename'
-  | 'sender'
-  | 'tags'
-  | 'date'
-  | 'size'
+type ColKey = 'name' | 'sender' | 'tags' | 'date' | 'size'
 type RowLimit = 10 | 50 | 100 | 200 | 'all'
 
 const COL_TO_SORT: Record<ColKey, SortKey> = {
   name: 'filename',
-  downloadFilename: 'downloadFilename',
   sender: 'sender',
   tags: 'tags',
   date: 'date',
@@ -78,25 +71,17 @@ const COL_TO_SORT: Record<ColKey, SortKey> = {
 
 const COL_LABELS: Record<ColKey, string> = {
   name: 'Name',
-  downloadFilename: 'Download as',
   sender: 'Sender',
   tags: 'Tags',
   date: 'Date',
   size: 'Size',
 }
 
-const TOGGLEABLE_COLS: ColKey[] = [
-  'downloadFilename',
-  'sender',
-  'tags',
-  'date',
-  'size',
-]
+const TOGGLEABLE_COLS: ColKey[] = ['sender', 'tags', 'date', 'size']
 const ROW_LIMITS: RowLimit[] = [10, 50, 100, 200, 'all']
 
 const DEFAULT_WIDTHS: Record<ColKey, number> = {
-  name: 240,
-  downloadFilename: 160,
+  name: 280,
   sender: 140,
   tags: 180,
   date: 96,
@@ -104,8 +89,7 @@ const DEFAULT_WIDTHS: Record<ColKey, number> = {
 }
 
 const MIN_WIDTHS: Record<ColKey, number> = {
-  name: 120,
-  downloadFilename: 100,
+  name: 140,
   sender: 80,
   tags: 100,
   date: 64,
@@ -114,14 +98,13 @@ const MIN_WIDTHS: Record<ColKey, number> = {
 
 const DEFAULT_VISIBLE: Record<ColKey, boolean> = {
   name: true,
-  downloadFilename: true,
   sender: true,
   tags: true,
   date: true,
   size: true,
 }
 
-const SETTINGS_KEY = 'docket.tableSettings.v2'
+const SETTINGS_KEY = 'docket.tableSettings.v3'
 
 type TableSettings = {
   visible: Record<ColKey, boolean>
@@ -346,17 +329,10 @@ export function DocumentTable(props: DocumentTableProps) {
                 <FileIcon />
               </span>
               <span className="cell-filename">{d.filename}</span>
-            </div>
-          )}
-          {effectiveVisible.downloadFilename && (
-            <div className="cell-download" data-col="downloadFilename">
-              <span className="cell-download-text">
-                {d.downloadFilename || <span className="cell-muted">same as name</span>}
-              </span>
               <button
                 type="button"
                 className="cell-edit"
-                aria-label="Edit download filename"
+                aria-label="Rename file"
                 onClick={(e) => {
                   e.stopPropagation()
                   onEditFilename(d)
@@ -546,7 +522,6 @@ export function DocumentTable(props: DocumentTableProps) {
             />
           </div>
           {header('name')}
-          {header('downloadFilename')}
           {header('sender')}
           {header('tags')}
           {header('date')}

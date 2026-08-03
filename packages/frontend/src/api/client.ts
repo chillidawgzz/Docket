@@ -1,10 +1,17 @@
-import type { Document, DocumentDTO, SyncEvent, SyncStatus, TagInfo } from './types'
+import type {
+  Document,
+  DocumentDTO,
+  SyncConfig,
+  SyncEvent,
+  SyncOptions,
+  SyncStatus,
+  TagInfo,
+} from './types'
 
 function normalizeDoc(d: DocumentDTO): Document {
   return {
     id: d.id,
     filename: d.filename,
-    downloadFilename: d.downloadFilename ?? null,
     sender: d.sender,
     tags: Array.isArray(d.tags) ? d.tags : [],
     date: new Date(d.date),
@@ -35,7 +42,7 @@ export async function fetchTags(): Promise<TagInfo[]> {
 
 export async function patchDocument(
   id: string,
-  body: { downloadFilename?: string | null; tags?: string[] },
+  body: { filename?: string; tags?: string[] },
 ): Promise<Document> {
   const res = await fetch(`/api/documents/${encodeURIComponent(id)}`, {
     method: 'PATCH',
@@ -49,6 +56,12 @@ export async function patchDocument(
 export async function fetchStatus(): Promise<SyncStatus> {
   const res = await fetch('/api/status')
   if (!res.ok) throw new Error('status failed')
+  return res.json()
+}
+
+export async function fetchSyncConfig(): Promise<SyncConfig> {
+  const res = await fetch('/api/sync/config')
+  if (!res.ok) throw new Error('sync config failed')
   return res.json()
 }
 
@@ -87,11 +100,44 @@ export async function fetchPreview(
   return { blob, contentType, filename }
 }
 
-export async function startSync(
+export async function startSyncJob(
+  options: SyncOptions = {},
+): Promise<{ started: boolean; alreadyRunning: boolean; error?: string }> {
+  const res = await fetch('/api/sync', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(options),
+  })
+  if (!res.ok) throw new Error('sync failed')
+  return res.json()
+}
+
+export async function pauseSyncJob(): Promise<void> {
+  const res = await fetch('/api/sync/pause', { method: 'POST' })
+  if (!res.ok) throw new Error('pause failed')
+}
+
+export async function resumeSyncJob(): Promise<void> {
+  const res = await fetch('/api/sync/resume', { method: 'POST' })
+  if (!res.ok) throw new Error('resume failed')
+}
+
+export async function cancelSyncJob(): Promise<void> {
+  const res = await fetch('/api/sync/cancel', { method: 'POST' })
+  if (!res.ok) throw new Error('cancel failed')
+}
+
+/** Subscribe to sync SSE (replays history, then live events). Resolves on complete/error or abort. */
+export async function watchSyncEvents(
   onEvent: (event: SyncEvent) => void,
+  signal?: AbortSignal,
 ): Promise<void> {
-  const res = await fetch('/api/sync', { method: 'POST' })
-  if (!res.ok || !res.body) throw new Error('sync failed')
+  const res = await fetch('/api/sync/events', {
+    method: 'GET',
+    signal,
+    headers: { Accept: 'text/event-stream' },
+  })
+  if (!res.ok || !res.body) throw new Error('sync events failed')
 
   const reader = res.body.getReader()
   const decoder = new TextDecoder()
@@ -105,12 +151,32 @@ export async function startSync(
     buf = lines.pop() || ''
     for (const line of lines) {
       const trimmed = line.trim()
-      if (trimmed.startsWith('data: ')) {
-        try {
-          onEvent(JSON.parse(trimmed.slice(6)) as SyncEvent)
-        } catch {
-          /* ignore malformed SSE */
+      if (!trimmed.startsWith('data: ')) continue
+      try {
+        const event = JSON.parse(trimmed.slice(6)) as SyncEvent
+        onEvent(event)
+        if (
+          event.type === 'complete' ||
+          event.type === 'error' ||
+          event.type === 'cancelled'
+        ) {
+          try {
+            await reader.cancel()
+          } catch {
+            /* ignore */
+          }
+          return
         }
+        if (event.type === 'snapshot' && !event.status.scanning) {
+          try {
+            await reader.cancel()
+          } catch {
+            /* ignore */
+          }
+          return
+        }
+      } catch {
+        /* ignore malformed SSE */
       }
     }
   }

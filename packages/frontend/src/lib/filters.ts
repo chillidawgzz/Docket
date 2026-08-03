@@ -76,8 +76,6 @@ export function filteredDocs(docs: Document[], state: FilterState): Document[] {
       const hay = (
         d.filename +
         ' ' +
-        (d.downloadFilename || '') +
-        ' ' +
         d.sender.name +
         ' ' +
         d.email.subject +

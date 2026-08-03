@@ -65,11 +65,6 @@ export function PreviewPanel({ doc, onClose, onView }: PreviewPanelProps) {
           <BigFileIcon />
         </div>
         <div className="preview-filename">{doc.filename}</div>
-        {doc.downloadFilename && (
-          <div className="preview-download-name">
-            downloads as <span className="mono">{doc.downloadFilename}</span>
-          </div>
-        )}
         {doc.tags.length > 0 && (
           <div className="preview-tags">
             {doc.tags.map((t) => (

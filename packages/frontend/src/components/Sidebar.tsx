@@ -9,6 +9,7 @@ interface SidebarProps {
   filters: FilterState
   anyFilter: boolean
   tagSuggestions: string[]
+  onResizeStart: (clientX: number) => void
   onToggleSender: (name: string) => void
   onToggleTag: (tag: string) => void
   onSetTagFilters: (tags: string[]) => void
@@ -51,6 +52,7 @@ export function Sidebar({
   filters,
   anyFilter,
   tagSuggestions,
+  onResizeStart,
   onToggleSender,
   onToggleTag,
   onSetTagFilters,
@@ -63,28 +65,29 @@ export function Sidebar({
   const tags = byTag(docs)
 
   return (
-    <aside className="sidebar" aria-label="Filters">
-      <Section title="Senders">
-        <div className="facet-list">
-          {senders.map((s) => (
-            <button
-              key={s.name}
-              type="button"
-              className={
-                'facet-row' + (filters.senderFilter === s.name ? ' active' : '')
-              }
-              onClick={() => onToggleSender(s.name)}
-            >
-              <span className="facet-avatar">{s.initials}</span>
-              <span className="facet-label">{s.name}</span>
-              <span className="facet-count">{s.count}</span>
-            </button>
-          ))}
-          {senders.length === 0 && (
-            <div className="sidebar-empty">no senders</div>
-          )}
-        </div>
-      </Section>
+    <div className="sidebar-shell">
+      <aside className="sidebar" aria-label="Filters">
+        <Section title="Senders">
+          <div className="facet-list">
+            {senders.map((s) => (
+              <button
+                key={s.name}
+                type="button"
+                className={
+                  'facet-row' + (filters.senderFilter === s.name ? ' active' : '')
+                }
+                onClick={() => onToggleSender(s.name)}
+              >
+                <span className="facet-avatar">{s.initials}</span>
+                <span className="facet-label">{s.name}</span>
+                <span className="facet-count">{s.count}</span>
+              </button>
+            ))}
+            {senders.length === 0 && (
+              <div className="sidebar-empty">no senders</div>
+            )}
+          </div>
+        </Section>
 
       <Section title="Tags">
         <div className="tag-mode-toggle" role="group" aria-label="Tag match mode">
@@ -178,6 +181,17 @@ export function Sidebar({
           Clear filters
         </button>
       )}
-    </aside>
+      </aside>
+      <div
+        className="sidebar-resize"
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Resize filters panel"
+        onMouseDown={(e) => {
+          e.preventDefault()
+          onResizeStart(e.clientX)
+        }}
+      />
+    </div>
   )
 }

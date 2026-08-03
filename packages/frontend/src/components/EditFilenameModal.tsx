@@ -4,7 +4,7 @@ import type { Document } from '../api/types'
 interface EditFilenameModalProps {
   doc: Document | null
   onClose: () => void
-  onSave: (downloadFilename: string) => Promise<void>
+  onSave: (filename: string) => Promise<void>
 }
 
 export function EditFilenameModal({
@@ -17,7 +17,7 @@ export function EditFilenameModal({
   const [error, setError] = useState('')
 
   useEffect(() => {
-    setValue(doc?.downloadFilename || doc?.filename || '')
+    setValue(doc?.filename || '')
     setError('')
   }, [doc])
 
@@ -38,17 +38,17 @@ export function EditFilenameModal({
         className="edit-modal"
         role="dialog"
         aria-modal="true"
-        aria-label="Edit download filename"
+        aria-label="Rename file"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="edit-modal-header">
-          <h3>Download filename</h3>
+          <h3>Rename file</h3>
           <button type="button" className="view-modal-close" onClick={onClose}>
             ✕
           </button>
         </div>
         <p className="edit-modal-sub">
-          Original: <span className="mono">{doc.filename}</span>
+          Downloads and the table use this name. Sync won&apos;t overwrite it.
         </p>
         <input
           className="edit-modal-input"
@@ -58,8 +58,13 @@ export function EditFilenameModal({
           onKeyDown={(e) => {
             if (e.key === 'Enter') {
               e.preventDefault()
+              const next = value.trim()
+              if (!next) {
+                setError('Name required')
+                return
+              }
               setSaving(true)
-              void onSave(value.trim())
+              void onSave(next)
                 .then(onClose)
                 .catch(() => setError('Could not save'))
                 .finally(() => setSaving(false))
@@ -76,9 +81,14 @@ export function EditFilenameModal({
             className="btn-download"
             disabled={saving}
             onClick={() => {
+              const next = value.trim()
+              if (!next) {
+                setError('Name required')
+                return
+              }
               setSaving(true)
               setError('')
-              void onSave(value.trim())
+              void onSave(next)
                 .then(onClose)
                 .catch(() => setError('Could not save'))
                 .finally(() => setSaving(false))

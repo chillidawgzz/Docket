@@ -1,0 +1,15 @@
+services:
+  docket:
+    build: .
+    image: docket:mvp
+    ports:
+      - "8420:8420"
+    env_file:
+      - .env
+    environment:
+      PORT: "8420"
+    volumes:
+      # Persist SQLite + attachment cache (same layout as bare-metal)
+      - ./data.db:/app/data.db
+      - ./data:/app/data
+    restart: unless-stopped

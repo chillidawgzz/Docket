@@ -52,7 +52,20 @@ function init() {
   `);
 
   if (!hasColumn('documents', 'download_filename')) {
-    db.exec('ALTER TABLE documents ADD COLUMN download_filename TEXT');
+    // legacy column no longer used
+  } else {
+    // Fold any prior "download as" names into filename, then drop the column.
+    db.exec(`
+      UPDATE documents
+      SET filename = download_filename
+      WHERE download_filename IS NOT NULL
+        AND trim(download_filename) != ''
+    `);
+    try {
+      db.exec('ALTER TABLE documents DROP COLUMN download_filename');
+    } catch {
+      /* older SQLite — column left unused */
+    }
   }
 
   return db;
@@ -60,12 +73,12 @@ function init() {
 
 function insertDocuments(docs) {
   if (!db) throw new Error('DB not initialized');
+  // Idempotent by id. Do not overwrite filename on conflict so user renames stick.
   const upsert = db.prepare(`
     INSERT INTO documents
     (id, filename, sender_name, sender_initials, date, size, subject, "from", snippet, full_text, label)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
-      filename = excluded.filename,
       sender_name = excluded.sender_name,
       sender_initials = excluded.sender_initials,
       date = excluded.date,
@@ -133,7 +146,6 @@ function getDocuments() {
   return docs.map((row) => ({
     id: row.id,
     filename: row.filename,
-    downloadFilename: row.download_filename || null,
     sender: { name: row.sender_name, initials: row.sender_initials },
     tags: getTagsForDocument(row.id),
     date: new Date(row.date),
@@ -157,20 +169,14 @@ function getAttachmentRef(id) {
 
 function getDocumentMeta(id) {
   if (!db) throw new Error('DB not initialized');
-  return db
-    .prepare('SELECT id, filename, download_filename FROM documents WHERE id = ?')
-    .get(id);
+  return db.prepare('SELECT id, filename FROM documents WHERE id = ?').get(id);
 }
 
-function setDownloadFilename(id, downloadFilename) {
+function setFilename(id, filename) {
   if (!db) throw new Error('DB not initialized');
-  const value =
-    downloadFilename == null || String(downloadFilename).trim() === ''
-      ? null
-      : String(downloadFilename).trim();
-  const result = db
-    .prepare('UPDATE documents SET download_filename = ? WHERE id = ?')
-    .run(value, id);
+  const value = String(filename || '').trim();
+  if (!value) return false;
+  const result = db.prepare('UPDATE documents SET filename = ? WHERE id = ?').run(value, id);
   return result.changes > 0;
 }
 
@@ -255,6 +261,14 @@ function getLatestMessageDate() {
   return row?.maxDate ? new Date(row.maxDate) : null;
 }
 
+function getLatestMessageDateForLabel(label) {
+  if (!db) throw new Error('DB not initialized');
+  const row = db
+    .prepare('SELECT MAX(date) as maxDate FROM documents WHERE label = ?')
+    .get(label);
+  return row?.maxDate ? new Date(row.maxDate) : null;
+}
+
 function getDb() {
   return db;
 }
@@ -267,11 +281,12 @@ module.exports = {
   getDocuments,
   getAttachmentRef,
   getDocumentMeta,
-  setDownloadFilename,
+  setFilename,
   listTags,
   setDocumentTags,
   clearDocuments,
   updateSyncStatus,
   getSyncStatus,
   getLatestMessageDate,
+  getLatestMessageDateForLabel,
 };

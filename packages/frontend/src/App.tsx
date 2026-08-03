@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { patchDocument } from './api/client'
 import type { Document } from './api/types'
 import { BulkBar } from './components/BulkBar'
@@ -8,6 +8,7 @@ import { EditFilenameModal } from './components/EditFilenameModal'
 import { EditTagsModal } from './components/EditTagsModal'
 import { PreviewPanel } from './components/PreviewPanel'
 import { Sidebar } from './components/Sidebar'
+import { SyncPage } from './components/SyncPage'
 import { Topbar } from './components/Topbar'
 import { ViewModal } from './components/ViewModal'
 import { useDocuments } from './hooks/useDocuments'
@@ -17,6 +18,21 @@ import { useSyncStatus } from './hooks/useSyncStatus'
 import { useTags } from './hooks/useTags'
 import { filteredDocs } from './lib/filters'
 import './styles/app.css'
+
+const SIDEBAR_WIDTH_KEY = 'docket.sidebarWidth'
+const SIDEBAR_MIN = 180
+const SIDEBAR_MAX = 480
+const SIDEBAR_DEFAULT = 250
+
+function loadSidebarWidth() {
+  try {
+    const n = Number(localStorage.getItem(SIDEBAR_WIDTH_KEY))
+    if (Number.isFinite(n) && n >= SIDEBAR_MIN && n <= SIDEBAR_MAX) return n
+  } catch {
+    /* ignore */
+  }
+  return SIDEBAR_DEFAULT
+}
 
 export default function App() {
   const { docs, loading, error, reload, upsertDoc } = useDocuments()
@@ -34,14 +50,57 @@ export default function App() {
     anyFilter,
   } = useFilters()
   const { checked, toggle, selectAll, clear } = useSelection()
-  const { ui: syncUi, sync } = useSyncStatus(reload)
+  const {
+    ui: syncUi,
+    sync,
+    pause,
+    resume,
+    cancel,
+    config,
+    progress,
+    log,
+    refreshConfig,
+  } = useSyncStatus(reload)
 
+  const [view, setView] = useState<'documents' | 'sync'>('documents')
   const [previewId, setPreviewId] = useState<string | null>(null)
   const [activeDocId, setActiveDocId] = useState<string | null>(null)
   const [viewDocId, setViewDocId] = useState<string | null>(null)
   const [editTagsId, setEditTagsId] = useState<string | null>(null)
   const [editFilenameId, setEditFilenameId] = useState<string | null>(null)
   const [showSidebar, setShowSidebar] = useState(false)
+  const [sidebarWidth, setSidebarWidth] = useState(loadSidebarWidth)
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(SIDEBAR_WIDTH_KEY, String(sidebarWidth))
+    } catch {
+      /* ignore */
+    }
+  }, [sidebarWidth])
+
+  const onSidebarResizeStart = useCallback(
+    (clientX: number) => {
+      const startX = clientX
+      const startW = sidebarWidth
+      const onMove = (ev: MouseEvent) => {
+        const next = Math.min(
+          SIDEBAR_MAX,
+          Math.max(SIDEBAR_MIN, startW + (ev.clientX - startX)),
+        )
+        setSidebarWidth(next)
+      }
+      const onUp = () => {
+        window.removeEventListener('mousemove', onMove)
+        window.removeEventListener('mouseup', onUp)
+        document.body.classList.remove('sidebar-resizing')
+      }
+      document.body.classList.add('sidebar-resizing')
+      window.addEventListener('mousemove', onMove)
+      window.addEventListener('mouseup', onUp)
+    },
+    [sidebarWidth],
+  )
 
   const list = useMemo(() => filteredDocs(docs, filters), [docs, filters])
 
@@ -76,7 +135,8 @@ export default function App() {
 
   const bodyClass =
     'body' +
-    (previewId ? ' preview-open' : '') +
+    (view === 'sync' ? ' sync-view' : '') +
+    (previewId && view === 'documents' ? ' preview-open' : '') +
     (showSidebar ? ' show-sidebar' : '')
 
   return (
@@ -101,11 +161,9 @@ export default function App() {
       <EditFilenameModal
         doc={editFilenameDoc}
         onClose={() => setEditFilenameId(null)}
-        onSave={async (downloadFilename) => {
+        onSave={async (filename) => {
           if (!editFilenameDoc) return
-          const updated = await patchDocument(editFilenameDoc.id, {
-            downloadFilename: downloadFilename || null,
-          })
+          const updated = await patchDocument(editFilenameDoc.id, { filename })
           upsertDoc(updated)
         }}
       />
@@ -115,47 +173,75 @@ export default function App() {
           onSearchChange={setSearch}
           onToggleSidebar={() => setShowSidebar((v) => !v)}
           syncUi={syncUi}
-          onSync={() => void sync()}
+          view={view}
+          searchDisabled={view === 'sync'}
+          onOpenSync={() => setView('sync')}
         />
-        <div className={bodyClass}>
-          <Sidebar
-            docs={docs}
-            filters={filters}
-            anyFilter={anyFilter}
-            tagSuggestions={tagNames}
-            onToggleSender={(name) => {
-              toggleSender(name)
-              closeMobileSidebar()
-            }}
-            onToggleTag={(tag) => {
-              toggleTagFilter(tag)
-            }}
-            onSetTagFilters={setTagFilters}
-            onSetTagMode={setTagMode}
-            onSetDateFrom={setDateFrom}
-            onSetDateTo={setDateTo}
-            onClearFilters={clearFilters}
-          />
-          <DocumentTable
-            list={list}
-            loading={loading}
-            error={error}
-            checked={checked}
-            previewId={previewId}
-            onToggleCheck={toggle}
-            onRowActivate={onRowActivate}
-            onSelectAll={(rows) => selectAll(rows)}
-            onRetry={() => void reload()}
-            onEditTags={(doc) => setEditTagsId(doc.id)}
-            onEditFilename={(doc) => setEditFilenameId(doc.id)}
-          >
-            <BulkBar docs={docs} checked={checked} onClear={clear} />
-          </DocumentTable>
-          <PreviewPanel
-            doc={previewDoc}
-            onClose={() => setPreviewId(null)}
-            onView={onView}
-          />
+        <div
+          className={bodyClass}
+          style={
+            view === 'documents'
+              ? ({ ['--sidebar-width' as string]: `${sidebarWidth}px` } as CSSProperties)
+              : undefined
+          }
+        >
+          {view === 'sync' ? (
+            <SyncPage
+              config={config}
+              syncing={syncUi.syncing}
+              paused={syncUi.paused}
+              progress={progress}
+              log={log}
+              onSync={(opts) => void sync(opts)}
+              onPause={() => void pause()}
+              onResume={() => void resume()}
+              onCancel={() => void cancel()}
+              onBack={() => setView('documents')}
+              onRefreshConfig={() => void refreshConfig()}
+            />
+          ) : (
+            <>
+              <Sidebar
+                docs={docs}
+                filters={filters}
+                anyFilter={anyFilter}
+                tagSuggestions={tagNames}
+                onResizeStart={onSidebarResizeStart}
+                onToggleSender={(name) => {
+                  toggleSender(name)
+                  closeMobileSidebar()
+                }}
+                onToggleTag={(tag) => {
+                  toggleTagFilter(tag)
+                }}
+                onSetTagFilters={setTagFilters}
+                onSetTagMode={setTagMode}
+                onSetDateFrom={setDateFrom}
+                onSetDateTo={setDateTo}
+                onClearFilters={clearFilters}
+              />
+              <DocumentTable
+                list={list}
+                loading={loading}
+                error={error}
+                checked={checked}
+                previewId={previewId}
+                onToggleCheck={toggle}
+                onRowActivate={onRowActivate}
+                onSelectAll={(rows) => selectAll(rows)}
+                onRetry={() => void reload()}
+                onEditTags={(doc) => setEditTagsId(doc.id)}
+                onEditFilename={(doc) => setEditFilenameId(doc.id)}
+              >
+                <BulkBar docs={docs} checked={checked} onClear={clear} />
+              </DocumentTable>
+              <PreviewPanel
+                doc={previewDoc}
+                onClose={() => setPreviewId(null)}
+                onView={onView}
+              />
+            </>
+          )}
         </div>
       </div>
     </>

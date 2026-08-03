@@ -5,7 +5,9 @@ interface TopbarProps {
   onSearchChange: (value: string) => void
   onToggleSidebar: () => void
   syncUi: SyncUiState
-  onSync: () => void
+  onOpenSync: () => void
+  view: 'documents' | 'sync'
+  searchDisabled?: boolean
 }
 
 export function Topbar({
@@ -13,7 +15,9 @@ export function Topbar({
   onSearchChange,
   onToggleSidebar,
   syncUi,
-  onSync,
+  onOpenSync,
+  view,
+  searchDisabled,
 }: TopbarProps) {
   return (
     <header className="topbar">
@@ -51,32 +55,23 @@ export function Topbar({
           placeholder="grep filename, sender, subject…"
           aria-label="Search documents"
           value={search}
+          disabled={searchDisabled}
           onChange={(e) => onSearchChange(e.target.value)}
         />
       </div>
       <div className="topbar-right">
         <button
           type="button"
-          disabled={syncUi.syncing}
-          onClick={onSync}
-          style={{
-            background: 'none',
-            border: '1px solid var(--border)',
-            color: 'var(--text-secondary)',
-            padding: '6px 12px',
-            borderRadius: 'var(--radius-s)',
-            fontSize: '12.5px',
-            fontWeight: 600,
-            cursor: syncUi.syncing ? 'default' : 'pointer',
-          }}
+          className={'topbar-sync-btn' + (view === 'sync' ? ' active' : '')}
+          onClick={onOpenSync}
         >
-          {syncUi.syncing ? '…' : 'Sync'}
+          {syncUi.syncing ? 'Syncing…' : 'Sync'}
         </button>
         <span>
           <span
             className="sync-dot"
             style={{
-              display: syncUi.showDot ? 'inline-block' : 'none',
+              display: syncUi.showDot || syncUi.syncing ? 'inline-block' : 'none',
               background: syncUi.dotDanger
                 ? 'var(--danger)'
                 : syncUi.dotMuted

@@ -1,12 +1,6 @@
 import type { Document } from '../api/types'
 
-export type SortKey =
-  | 'filename'
-  | 'downloadFilename'
-  | 'sender'
-  | 'tags'
-  | 'date'
-  | 'size'
+export type SortKey = 'filename' | 'sender' | 'tags' | 'date' | 'size'
 export type SortDir = 'asc' | 'desc'
 
 export function sortDocs(
@@ -22,13 +16,6 @@ export function sortDocs(
         cmp = a.filename.localeCompare(b.filename, undefined, {
           sensitivity: 'base',
         })
-        break
-      case 'downloadFilename':
-        cmp = (a.downloadFilename || '').localeCompare(
-          b.downloadFilename || '',
-          undefined,
-          { sensitivity: 'base' },
-        )
         break
       case 'sender':
         cmp = a.sender.name.localeCompare(b.sender.name, undefined, {
