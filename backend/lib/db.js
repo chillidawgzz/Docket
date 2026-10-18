@@ -1,7 +1,8 @@
 const Database = require('better-sqlite3');
 const path = require('path');
 
-const dbPath = path.join(__dirname, '..', '..', 'data.db');
+// DB_PATH lets Docker keep the DB (and its -wal/-shm files) inside a mounted directory
+const dbPath = process.env.DB_PATH || path.join(__dirname, '..', '..', 'data.db');
 let db;
 
 function hasColumn(table, column) {
@@ -506,8 +507,15 @@ function reorderSenderGroups(ids) {
   return listSenderGroupsState();
 }
 
+// Checkpoints the WAL into the main file so nothing is left only in -wal
+function close() {
+  if (db) db.close();
+  db = null;
+}
+
 module.exports = {
   init,
+  close,
   getDb,
   insertDocuments,
   insertAttachmentIndex,

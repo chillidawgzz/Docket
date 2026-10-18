@@ -8,8 +8,9 @@ services:
       - .env
     environment:
       PORT: "8420"
+      # DB lives in the mounted dir so SQLite's -wal/-shm files persist with it
+      DB_PATH: /app/data/data.db
     volumes:
-      # Persist SQLite + attachment cache (same layout as bare-metal)
-      - ./data.db:/app/data.db
+      # Persist SQLite + attachment cache
       - ./data:/app/data
     restart: unless-stopped

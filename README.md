@@ -126,8 +126,6 @@ cd Docket
 cp .env.example .env
 # edit .env — set GMAIL_USER and GMAIL_APP_PASSWORD
 
-# Bind mounts need a real file (not a directory) for the SQLite DB
-touch data.db
 mkdir -p data/attachments
 
 docker compose up --build -d
@@ -135,7 +133,7 @@ docker compose up --build -d
 
 Open `http://localhost:8420` (or `http://<your-lan-ip>:8420`).
 
-Use **Sync** in the UI to pull attachments into the local archive. Data persists in `./data.db` and `./data/` on the host.
+Use **Sync** in the UI to pull attachments into the local archive. Data persists in `./data/` on the host (database at `./data/data.db`).
 
 Stop:
 
@@ -148,7 +146,7 @@ Or without Compose:
 ```bash
 docker build -t docket:mvp .
 docker run --rm -p 8420:8420 --env-file .env \
-  -v "$(pwd)/data.db:/app/data.db" \
+  -e DB_PATH=/app/data/data.db \
   -v "$(pwd)/data:/app/data" \
   docket:mvp
 ```

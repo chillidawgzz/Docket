@@ -374,9 +374,19 @@ if (fs.existsSync(FRONTEND_DIST)) {
   log(`Frontend dist not found at ${FRONTEND_DIST} — run: npm run build`);
 }
 
-app.listen(PORT, '0.0.0.0', () => {
+const server = app.listen(PORT, '0.0.0.0', () => {
   log(`Docket server listening on 0.0.0.0:${PORT}`);
   db.init();
   log('Database initialized');
   imapClient.rebuildAttachmentIndex();
 });
+
+// Node as PID 1 ignores SIGTERM by default; close the DB so `docker compose down` doesn't lose writes
+for (const signal of ['SIGTERM', 'SIGINT']) {
+  process.on(signal, () => {
+    log(`${signal} received, shutting down`);
+    server.close();
+    db.close();
+    process.exit(0);
+  });
+}
