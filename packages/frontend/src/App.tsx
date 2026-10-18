@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react'
-import { patchDocument } from './api/client'
+import { patchDocument, resetDocumentFilename } from './api/client'
 import type { Document } from './api/types'
 import { BulkBar } from './components/BulkBar'
 import { BulkRenameModal } from './components/BulkRenameModal'
@@ -149,6 +149,35 @@ export default function App() {
     [bulkTagsOpen, docs, checked],
   )
 
+  const [resetProgress, setResetProgress] = useState<{
+    done: number
+    total: number
+  } | null>(null)
+
+  const resetCheckedNames = async () => {
+    const ids = [...checked]
+    if (
+      !window.confirm(
+        `Reset ${ids.length} files to their original names? Custom names will be lost.`,
+      )
+    )
+      return
+    let failed = 0
+    setResetProgress({ done: 0, total: ids.length })
+    // Sequential: each reset may fetch from IMAP
+    for (const [i, id] of ids.entries()) {
+      try {
+        upsertDoc(await resetDocumentFilename(id))
+      } catch {
+        failed++
+      }
+      setResetProgress({ done: i + 1, total: ids.length })
+    }
+    setResetProgress(null)
+    if (failed) window.alert(`Could not reset ${failed} of ${ids.length} filenames.`)
+    else clear()
+  }
+
   const closeMobileSidebar = useCallback(() => {
     if (window.innerWidth <= 900) setShowSidebar(false)
   }, [])
@@ -229,6 +258,13 @@ export default function App() {
         onRetry={() => void reload()}
         onEditTags={(doc) => setEditTagsId(doc.id)}
         onEditFilename={(doc) => setEditFilenameId(doc.id)}
+        onResetFilename={async (doc) => {
+          try {
+            upsertDoc(await resetDocumentFilename(doc.id))
+          } catch {
+            window.alert(`Could not reset the filename of “${doc.filename}”.`)
+          }
+        }}
       >
         <BulkBar
           docs={docs}
@@ -236,6 +272,8 @@ export default function App() {
           onClear={clear}
           onRename={() => setBulkRenameOpen(true)}
           onTag={() => setBulkTagsOpen(true)}
+          onResetNames={() => void resetCheckedNames()}
+          resetProgress={resetProgress}
         />
       </DocumentTable>
     )

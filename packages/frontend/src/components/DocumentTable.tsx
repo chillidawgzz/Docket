@@ -45,6 +45,26 @@ function GearIcon() {
   )
 }
 
+function ResetIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M4 12a8 8 0 1 0 2.4-5.7"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinecap="round"
+      />
+      <path
+        d="M4 4v4h4"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
 function EditIcon() {
   return (
     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -145,6 +165,7 @@ interface DocumentTableProps {
   onRetry: () => void
   onEditTags: (doc: Document) => void
   onEditFilename: (doc: Document) => void
+  onResetFilename: (doc: Document) => void
   children?: ReactNode
 }
 
@@ -161,6 +182,7 @@ export function DocumentTable(props: DocumentTableProps) {
     onRetry,
     onEditTags,
     onEditFilename,
+    onResetFilename,
     children,
   } = props
 
@@ -350,6 +372,18 @@ export function DocumentTable(props: DocumentTableProps) {
                 }}
               >
                 <EditIcon />
+              </button>
+              <button
+                type="button"
+                className="cell-edit"
+                aria-label="Reset to original filename"
+                title="Reset to original filename"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onResetFilename(d)
+                }}
+              >
+                <ResetIcon />
               </button>
             </div>
           )}

@@ -188,6 +188,21 @@ app.patch('/api/documents/:id', (req, res) => {
   }
 });
 
+// Restore the attachment's own filename (from the cache, or fetched via IMAP)
+app.post('/api/documents/:id/reset-filename', async (req, res) => {
+  try {
+    const id = req.params.id;
+    const file = await imapClient.downloadAttachment(id);
+    if (!file || !file.sourceFilename) return res.status(404).json({ error: 'not found' });
+    db.setFilename(id, file.sourceFilename);
+    const doc = imapClient.getDocuments().find((d) => d.id === id);
+    if (!doc) return res.status(404).json({ error: 'not found' });
+    res.json(doc);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get('/api/documents/:id/download', async (req, res) => {
   try {
     const file = await imapClient.downloadAttachment(req.params.id);

@@ -156,6 +156,15 @@ export async function patchDocument(
   return normalizeDoc(await res.json())
 }
 
+export async function resetDocumentFilename(id: string): Promise<Document> {
+  const res = await fetch(
+    `/api/documents/${encodeURIComponent(id)}/reset-filename`,
+    { method: 'POST' },
+  )
+  if (!res.ok) throw new Error('reset failed')
+  return normalizeDoc(await res.json())
+}
+
 export async function fetchStatus(): Promise<SyncStatus> {
   const res = await fetch('/api/status')
   if (!res.ok) throw new Error('status failed')

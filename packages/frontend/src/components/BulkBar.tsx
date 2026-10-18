@@ -8,6 +8,9 @@ interface BulkBarProps {
   onClear: () => void
   onRename: () => void
   onTag: () => void
+  onResetNames: () => void
+  /** Progress while resetting names, null when idle */
+  resetProgress: { done: number; total: number } | null
 }
 
 export function BulkBar({
@@ -16,6 +19,8 @@ export function BulkBar({
   onClear,
   onRename,
   onTag,
+  onResetNames,
+  resetProgress,
 }: BulkBarProps) {
   const checkedDocs = docs.filter((d) => checked.has(d.id))
   if (checkedDocs.length === 0) return null
@@ -35,6 +40,16 @@ export function BulkBar({
           </button>
           <button type="button" className="btn-clear" onClick={onRename}>
             Rename…
+          </button>
+          <button
+            type="button"
+            className="btn-clear"
+            disabled={resetProgress != null}
+            onClick={onResetNames}
+          >
+            {resetProgress
+              ? `Resetting ${resetProgress.done}/${resetProgress.total}…`
+              : 'Reset names'}
           </button>
         </>
       )}
