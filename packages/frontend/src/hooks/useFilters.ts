@@ -3,8 +3,7 @@ import type { FilterState, TagMode } from '../lib/filters'
 
 const initial: FilterState = {
   search: '',
-  senderFilter: null,
-  groupFilter: null,
+  senderFilters: [],
   tagFilters: [],
   tagMode: 'or',
   dateFrom: null,
@@ -21,17 +20,22 @@ export function useFilters() {
   const toggleSender = useCallback((name: string) => {
     setFilters((f) => ({
       ...f,
-      groupFilter: null,
-      senderFilter: f.senderFilter === name ? null : name,
+      senderFilters: f.senderFilters.includes(name)
+        ? f.senderFilters.filter((s) => s !== name)
+        : [...f.senderFilters, name],
     }))
   }, [])
 
-  const toggleGroup = useCallback((groupId: number) => {
-    setFilters((f) => ({
-      ...f,
-      senderFilter: null,
-      groupFilter: f.groupFilter === groupId ? null : groupId,
-    }))
+  /** Select every sender in the list, or deselect them all if already selected. */
+  const toggleSenders = useCallback((names: string[]) => {
+    if (!names.length) return
+    setFilters((f) => {
+      const allOn = names.every((n) => f.senderFilters.includes(n))
+      const senderFilters = allOn
+        ? f.senderFilters.filter((s) => !names.includes(s))
+        : [...new Set([...f.senderFilters, ...names])]
+      return { ...f, senderFilters }
+    })
   }, [])
 
   const setTagFilters = useCallback((tagFilters: string[]) => {
@@ -69,8 +73,7 @@ export function useFilters() {
   }, [])
 
   const anyFilter =
-    !!filters.senderFilter ||
-    filters.groupFilter != null ||
+    filters.senderFilters.length > 0 ||
     filters.tagFilters.length > 0 ||
     !!filters.dateFrom ||
     !!filters.dateTo ||
@@ -80,7 +83,7 @@ export function useFilters() {
     filters,
     setSearch,
     toggleSender,
-    toggleGroup,
+    toggleSenders,
     toggleTagFilter,
     setTagFilters,
     setTagMode,

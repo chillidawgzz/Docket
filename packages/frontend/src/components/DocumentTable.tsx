@@ -7,7 +7,7 @@ import {
   type ReactNode,
 } from 'react'
 import type { Document } from '../api/types'
-import { formatShortDate, formatSize, monthKey, monthLabel } from '../lib/format'
+import { formatFullDate, formatSize, monthKey, monthLabel } from '../lib/format'
 import { sortDocs, type SortDir, type SortKey } from '../lib/sort'
 import { tagColor } from '../lib/tagColor'
 import { LoadingInline, LoadingStatus } from './Spinner'
@@ -85,7 +85,7 @@ const DEFAULT_WIDTHS: Record<ColKey, number> = {
   name: 280,
   sender: 140,
   tags: 180,
-  date: 96,
+  date: 112,
   size: 76,
 }
 
@@ -210,6 +210,16 @@ export function DocumentTable(props: DocumentTableProps) {
   useEffect(() => {
     if (selectAllRef.current) selectAllRef.current.indeterminate = someChecked
   }, [someChecked])
+
+  // Bring the last-opened row back into view when returning from preview
+  const scrolledToPreview = useRef(false)
+  useEffect(() => {
+    if (scrolledToPreview.current || !previewId || loading) return
+    scrolledToPreview.current = true
+    document
+      .querySelector(`.doc-row[data-id="${CSS.escape(previewId)}"]`)
+      ?.scrollIntoView({ block: 'center' })
+  }, [previewId, loading])
 
   const [isMobile, setIsMobile] = useState(
     () => typeof window !== 'undefined' && window.matchMedia('(max-width: 900px)').matches,
@@ -372,7 +382,7 @@ export function DocumentTable(props: DocumentTableProps) {
           )}
           {effectiveVisible.date && (
             <div className="cell-date" data-col="date">
-              {formatShortDate(d.date)}
+              {formatFullDate(d.date)}
             </div>
           )}
           {effectiveVisible.size && (

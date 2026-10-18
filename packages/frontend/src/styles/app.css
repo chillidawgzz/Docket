@@ -345,7 +345,8 @@
   }
   .facet-row:hover{background:var(--raised); color:var(--text);}
   .facet-row.active{background:var(--accent-soft); color:var(--text);}
-  .facet-row.active .facet-count{color:var(--accent);}
+  .facet-row.active .facet-count,
+  .facet-row.partial .facet-count{color:var(--accent);}
   .facet-avatar{
     width:18px;height:18px;border-radius:4px;
     background:var(--raised);

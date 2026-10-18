@@ -3,6 +3,7 @@ import type { Document } from '../api/types'
 import {
   bySenderName,
   byTag,
+  compareNames,
   type FilterState,
   type SenderGroupInfo,
 } from '../lib/filters'
@@ -28,7 +29,7 @@ interface SidebarProps {
   hiddenSenders: string[]
   onResizeStart: (clientX: number) => void
   onToggleSender: (name: string) => void
-  onToggleGroup: (groupId: number) => void
+  onToggleGroup: (senders: string[]) => void
   onToggleTag: (tag: string) => void
   onSetTagFilters: (tags: string[]) => void
   onSetTagMode: (mode: 'and' | 'or') => void
@@ -175,7 +176,7 @@ export function Sidebar({
   ) => {
     const menuKey = `sender:${name}`
     const isHidden = hiddenSet.has(name)
-    const active = filters.senderFilter === name
+    const active = filters.senderFilters.includes(name)
     return (
       <div
         key={name}
@@ -272,7 +273,12 @@ export function Sidebar({
           <div className="facet-list">
             {groups.map((g, index) => {
               const menuKey = `group:${g.id}`
-              const active = filters.groupFilter === g.id
+              const selectedCount = g.senders.filter((s) =>
+                filters.senderFilters.includes(s),
+              ).length
+              const active =
+                g.senders.length > 0 && selectedCount === g.senders.length
+              const partial = selectedCount > 0 && !active
               const count = groupCount(g)
               const moveGroup = (toIndex: number) => {
                 const ids = groups.map((x) => x.id)
@@ -304,8 +310,15 @@ export function Sidebar({
                     </button>
                     <button
                       type="button"
-                      className={'facet-row facet-row--group' + (active ? ' active' : '')}
-                      onClick={() => onToggleGroup(g.id)}
+                      className={
+                        'facet-row facet-row--group' +
+                        (active ? ' active' : '') +
+                        (partial ? ' partial' : '')
+                      }
+                      title={
+                        active ? 'Deselect all senders' : 'Select all senders'
+                      }
+                      onClick={() => onToggleGroup(g.senders)}
                     >
                       <span className="facet-label">{g.name}</span>
                       <span className="facet-count">{count}</span>
@@ -371,7 +384,7 @@ export function Sidebar({
                   </div>
                   {!g.collapsed && (
                     <div className="sender-group-members">
-                      {g.senders.map((name) => {
+                      {[...g.senders].sort(compareNames).map((name) => {
                         const meta = senderMeta.get(name)
                         return renderSenderRow(
                           name,

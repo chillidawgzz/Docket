@@ -49,7 +49,7 @@ export default function App() {
     filters,
     setSearch,
     toggleSender,
-    toggleGroup,
+    toggleSenders,
     toggleTagFilter,
     setTagFilters,
     setTagMode,
@@ -164,12 +164,10 @@ export default function App() {
 
   const onBackToDocuments = useCallback(() => {
     setView('documents')
-    setActiveDocId(null)
   }, [])
 
   const showDocuments = useCallback(() => {
     setView('documents')
-    setActiveDocId(null)
     closeMobileSidebar()
   }, [closeMobileSidebar])
 
@@ -322,8 +320,8 @@ export default function App() {
               toggleSender(name)
               showDocuments()
             }}
-            onToggleGroup={(groupId) => {
-              toggleGroup(groupId)
+            onToggleGroup={(senders) => {
+              toggleSenders(senders)
               showDocuments()
             }}
             onToggleTag={(tag) => {

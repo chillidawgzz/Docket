@@ -4,8 +4,7 @@ export type TagMode = 'and' | 'or'
 
 export interface FilterState {
   search: string
-  senderFilter: string | null
-  groupFilter: number | null
+  senderFilters: string[]
   tagFilters: string[]
   tagMode: TagMode
   dateFrom: string | null // YYYY-MM-DD
@@ -41,7 +40,11 @@ export function bySenderName(docs: Document[]) {
     }
     map[key].count++
   }
-  return Object.values(map).sort((a, b) => b.count - a.count)
+  return Object.values(map).sort((a, b) => compareNames(a.name, b.name))
+}
+
+export function compareNames(a: string, b: string) {
+  return a.localeCompare(b, undefined, { sensitivity: 'base' })
 }
 
 export function byTag(docs: Document[]) {
@@ -54,7 +57,7 @@ export function byTag(docs: Document[]) {
   return Object.entries(map)
     .map(([name, count]) => ({ name, count }))
     .sort((a, b) =>
-      a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }),
+      compareNames(a.name, b.name),
     )
 }
 
@@ -90,17 +93,14 @@ export function filteredDocs(
   const toTs = state.dateTo ? dayEnd(state.dateTo) : null
   const hidden = effectiveHiddenSenders(groups, hiddenSenders)
 
-  let groupSenders: Set<string> | null = null
-  if (state.groupFilter != null) {
-    const g = groups.find((x) => x.id === state.groupFilter)
-    if (g) groupSenders = new Set(g.senders)
-  }
+  const senders = state.senderFilters.length
+    ? new Set(state.senderFilters)
+    : null
 
   return docs.filter((d) => {
     if (hidden.has(d.sender.name)) return false
 
-    if (state.senderFilter && d.sender.name !== state.senderFilter) return false
-    if (groupSenders && !groupSenders.has(d.sender.name)) return false
+    if (senders && !senders.has(d.sender.name)) return false
 
     if (state.tagFilters.length) {
       const tags = d.tags.map((t) => t.toLowerCase())
